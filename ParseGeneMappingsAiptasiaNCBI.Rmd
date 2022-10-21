@@ -1,0 +1,138 @@
+---
+title: "ParseGeneMappingsAiptasiaNCBI"
+author: "Chuck Roesel"
+date: "3/7/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+aipGenes <- read.table("gene_result.txt", header=T, sep="\t", quote='')
+```
+
+```{r}
+ncbiToAip <- subset(aipGenes, select=c("GeneID", "Aliases", "description"))
+colnames(ncbiToAip) <- c("NCBI", "Aliases", "NCBI_Desc")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+ncbiToAip <- ncbiToAip %>% separate(Aliases, c("Aip", "Alias1", "Alias2", "Alias3"), ",")
+ncbiToAip <- ncbiToAip %>% separate(Aip, c("Org", "Aip"), "_")
+ncbiToAip <- subset(ncbiToAip, select=c("NCBI", "Aip", "Alias1", "NCBI_Desc"))
+colnames(ncbiToAip) <- c("NCBI", "Aip", "Symbol", "NCBI_Desc")
+```
+
+```{r}
+aipToKX <- read.table("aipgene_to_kxj.tsv", header=F, sep="\t", quote='')
+colnames(aipToKX) <- c("Aip", "KXJ")
+aipToKX <- merge(aipToKX, ncbiToAip, by.x = "Aip", by.y = "Aip")
+```
+
+Use the KEGG API to get the conversion from NCBI ID to KEGG ID.
+
+```{bash}
+wget -O ncbiToEpa.tsv http://rest.kegg.jp/conv/epa/ncbi-geneid
+```
+
+```{r}
+ncbiToEpa <- read.table("ncbiToEpa.tsv", header=F, sep="\t", quote='')
+ncbiToEpa <- ncbiToEpa %>% separate(V1, c("ncbiType", "ncbiId"), ":")
+ncbiToEpa <- subset(ncbiToEpa, select=c("ncbiId", "V2"))
+colnames(ncbiToEpa) <- c("NCBI", "EPA")
+```
+
+```{r}
+kxjToKegg <- merge(ncbiToEpa, aipToKX)
+```
+
+Read the Aiptasia KEGG ortholog files to obtain mappings from Aiptasia KEGG IDs to KEGG ortholog IDs.
+
+```{perl}
+open(EPATOKO, ">", "epaToKo.csv") or die $!;
+open(FASTA, ">", "epa.fasta") or die $!;
+
+my $dir = 'epa';
+opendir(my $dh, $dir) || die "Can't open $dir: $!";
+  while (readdir $dh) {
+    my $file = $_;
+    open(FILE, "<", "$dir/$file") or die $!;
+    my $ko;
+    my $seq = "";
+    my $epa;
+    while(<FILE>){
+      chomp;
+      my $line = $_;
+      if($line =~ /ORTHOLOGY\s+(.*?)\s+(.*?)/){
+        $ko = $1;
+      }
+      if($line =~ /ENTRY\s+(.*?)\s+(.*?)/){
+        $epa = $1;
+      }
+      if($line =~ /([atgc]+)/){
+        $seq.= $1;
+      }
+    }
+    close(FILE);
+    if($epa){
+      my $id = 'epa:'.$epa;
+      if($ko){
+        print EPATOKO join(",", $id, $ko), "\n";
+      }
+      print FASTA ">", $id, "\n";
+      print FASTA uc($seq), "\n";
+    }
+  }
+closedir $dh;
+
+```
+
+```{r}
+epaToKeggOrtholog <- read.csv("epaToKo.csv", header=F)
+colnames(epaToKeggOrtholog) <- c("EPA", "KO")
+```
+
+```{r}
+aipProteinIdsToKeggOrthologs <- merge(kxjToKegg, epaToKeggOrtholog)
+```
+
+```{r}
+tx2gene <- read.csv("tx2gene.csv", header=F)
+colnames(tx2gene) <- c("KXJ", "KOcr")
+everyID <- merge(tx2gene, aipProteinIdsToKeggOrthologs)
+everyID$KOcr <- as.character(everyID$KOcr) 
+everyID$KO <- as.character(everyID$KO)
+```
+
+```{r}
+koDesc <- read.table("koDesc.tsv", sep="\t", quote='', header=T, stringsAsFactors = F)
+colnames(koDesc) <- c("KO", "KO_Desc")
+koDescCr <- koDesc
+colnames(koDescCr) <- c("KOcr", "KO_DescCr")
+everyID <- merge(everyID, koDesc)
+everyID <- merge(everyID, koDescCr)
+write.csv(everyID, file="everyID.csv")
+```
+
+```{r}
+same <- subset(everyID, KOcr == KO)
+diff <- subset(everyID, KOcr != KO)
+```
+```{r}
+write.csv(diff, file="AnnotationDiffs.csv")
+```
+
+```{r}
+tx2geneGenome <- subset(everyID, select=c("KXJ","KO"))
+write.csv(tx2geneGenome, file="tx2geneGenome.csv", row.names=F, quote=F)
+save.image("GeneMappings.RData")
+```

@@ -1,0 +1,94 @@
+---
+title: "Aiptasia Path Summary Table"
+author: "Chuck Roesel"
+date: "3/18/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = T,
+	message = FALSE,
+	warning = FALSE
+)
+library("dplyr")
+library("tidyr")
+library("knitr")
+library("kableExtra")
+library("pander")
+
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaFigsAndTables.RData")
+```
+
+```{r}
+Table1 <- subset(both, select = c("Category", "Aip", "VibrioEnriched", "MentholEnriched",
+                                  "DE_Pct", "V_Pct", "M_Pct", "DE", "V", "M", "VuT", 
+                                  "VdT", "MuT", "MdT","Vu", "Vd", "Mu", "Md", "VuMu", 
+                                  "VdMd", "VuMd", "VdMu", "Iu", "IuVu", "IuVd", "IuMu", "IuMd"))
+Table1$Path <- rownames(Table1)
+Table1 <- Table1 %>% separate(Path, c("ID", "Pathway Description"), 8)
+rownames(Table1) <- Table1$ID
+Table1$"Up Vibrio" <- paste0(Table1$VuT, " (", sprintf("%1.0f",100*Table1$VuT/Table1$Aip), "%)")
+Table1$"Down Vibrio" <- paste0(Table1$VdT, " (", sprintf("%1.0f",100*Table1$VdT/Table1$Aip), "%)")
+Table1$"Up Menthol" <- paste0(Table1$MuT, " (", sprintf("%1.0f",100*Table1$MuT/Table1$Aip), "%)")
+Table1$"Down Menthol" <- paste0(Table1$MdT, " (", sprintf("%1.0f",100*Table1$MdT/Table1$Aip), "%)")
+Table1 <- subset(Table1, select=c("Pathway Description","Category", "VibrioEnriched", "MentholEnriched",
+                                  "Up Vibrio", "Down Vibrio", "Up Menthol", "Down Menthol"))
+unique(Table1$Category)
+
+```
+
+```{r}
+
+enrichedBoth <- subset(Table1, MentholEnriched != ' NA', select=-c(VibrioEnriched, MentholEnriched))
+enrichedBoth <- enrichedBoth[order(enrichedBoth$Category),]
+transport <- grep("Transport", enrichedBoth$Category)
+translation <- grep("Translation", enrichedBoth$Category)
+environment <- grep("Environmenta", enrichedBoth$Category)
+unique(enrichedBoth$Category)
+```
+```{r}
+enrichedBoth <- subset(enrichedBoth, select=-c(Category))
+kable(enrichedBoth, "latex",caption="Enriched Vibrio and Menthol", row.names = F, booktabs=T) %>% 
+  kable_styling("striped", full_width = F) %>% 
+  group_rows("Translation", min(translation), max(translation)) %>%
+  group_rows("Transport and Catabolism", min(transport), max(transport)) %>%
+  group_rows("Environmental Adaptation", min(environment), max(environment))
+```
+```{r, results='asis'}
+#for (category in unique(Table1$Category)){
+  #cat('\n')
+#enrichedVibrioImmune <- subset(Table1, MentholEnriched == ' NA' & Category == category, select=-c(Category, VibrioEnriched, MentholEnriched))
+#print(kable(enrichedVibrioImmune, caption=paste0(category," Pathways Enriched Vibrio"), row.names = F))
+#}
+```
+
+```{r}
+enrichedVibrio <- subset(Table1, MentholEnriched == ' NA', select=-c(VibrioEnriched, MentholEnriched))
+enrichedVibrio <- enrichedVibrio[order(enrichedVibrio$Category),]
+immune <- grep("Immune", enrichedVibrio$Category)
+signal <- grep("Signal", enrichedVibrio$Category)
+death <- grep("death", enrichedVibrio$Category)
+endocrine <- grep("Endocrine", enrichedVibrio$Category)
+nervous <- grep("Nervous", enrichedVibrio$Category)
+community <- grep("community", enrichedVibrio$Category)
+motility <- grep("motility", enrichedVibrio$Category)
+development <- grep("Development", enrichedVibrio$Category)
+unique(enrichedVibrio$Category)
+```
+
+```{r}
+enrichedVibrio <- subset(enrichedVibrio, select=-c(Category))
+kable(enrichedVibrio, "latex",caption = "Enriched Vibrio", row.names = F, booktabs=T) %>% kable_styling("striped", full_width = F) %>% 
+  group_rows("Cell Growth and Death", min(death), max(death)) %>%
+  group_rows("Immune System", min(immune), max(immune)) %>%
+  group_rows("Endocrine System", min(endocrine), max(endocrine)) %>%
+  group_rows("Nervous System", min(nervous), max(nervous)) %>%
+  group_rows("Cellular Community", min(community), max(community)) %>%
+  group_rows("Cell Motility", min(motility), max(motility)) %>%
+  group_rows("Development", min(development), max(development)) %>%
+  group_rows("Signal Transduction", min(signal), max(signal)) 
+```
+

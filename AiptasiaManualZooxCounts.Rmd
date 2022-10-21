@@ -1,0 +1,141 @@
+---
+title: "Aiptasia Manual Zoox Counts"
+output:
+  pdf_document:
+    fig_caption: true
+  html_document:
+    df_print: paged
+  md_document:
+    variant: gfm
+    df_print: paged
+  word_document: default
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+---
+```{r global_options, echo=TRUE}
+rm(list = ls())
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE, results='asis')
+```
+
+```{r}
+library("knitr")
+library("kableExtra")
+library("tidyr")
+library("dplyr")
+library("knitr")
+library("pander")
+```
+
+Create a dataframe of the weights of the anemones in milligrams and the counts of zoox in 8 squares of hemocytometer.
+
+```{r}
+#Weight of anemones in milligrams
+mgWeight <- c(103, 139, 156, 182, 361, 67, 126, 85, 68, 65, 142)
+#Counts of zoox in 8 squares of hemocytometer.
+Count <- c(187, 132, 107, 71, 111, 1,  2,  5, 43,  2,  8)
+#Treatment groups
+Menthol <- c("Control", "Control", "Control", "Control", "Control", 
+             "Menthol","Menthol","Menthol", "Control", "Menthol", "Menthol")
+dfCounts <- data.frame(Weight=mgWeight, Count=Count, Menthol=Menthol)
+```
+
+Calculate zoox per anemone. Each anemone homogenized in 1000 uL filtered seawater. Hemocytometer volume is 100 uL.
+
+```{r}
+#Small squares counted
+squaresCounted <- 8
+#Volume of small square in mL
+volumeSmallSquare <- 0.000004 
+volumeSquaresCounted <- (volumeSmallSquare) * squaresCounted
+```
+```{r}
+#Calculate zoox/mL
+dfCounts$perMl <- with(dfCounts, (Count/volumeSquaresCounted))
+#Log-transform the zoox counts
+dfCounts$ZooxPerMgLog <- with(dfCounts, log2(perMl/Weight))
+#Calculate zoox/weight/volume
+dfCounts$ZooxPerMg <- with(dfCounts, perMl/Weight)
+```
+
+\newpage
+
+```{r}
+dfCounts <- subset(dfCounts, select=c("Menthol","Count", "perMl","Weight", "ZooxPerMg", "ZooxPerMgLog"))
+kable(dfCounts, caption="Symbiodinium Count Summary", digits=2)
+library(plotrix)
+mentholCounts <- subset(dfCounts, Menthol == 'Menthol')
+controlCounts <- subset(dfCounts, Menthol == 'Control')
+mean(mentholCounts$ZooxPerMg)
+std.error(mentholCounts$ZooxPerMg)
+mean(controlCounts$ZooxPerMg)
+std.error(controlCounts$ZooxPerMg)
+```
+
+\newpage
+Shapiro Test Zoox/Mg
+
+```{r}
+shapiro.test(dfCounts$ZooxPerMg)
+```
+
+\newpage
+
+```{r}
+qqnorm(dfCounts$ZooxPerMg)
+```
+
+\newpage
+
+```{r}
+shapiro.test(dfCounts$ZooxPerMgLog)
+```
+
+```{r}
+qqnorm(dfCounts$ZooxPerMgLog)
+```
+
+
+\newpage
+
+One-way ANOVA of the zoox counts
+
+```{r}
+aov.zoox.log <- aov(ZooxPerMg ~ Menthol, data=dfCounts)
+summary(aov.zoox.log)
+meansTable <- model.tables(aov.zoox.log, "means", se.contrast=T)
+se.contrast(aov.zoox.log, list(Menthol == "Menthol", Menthol == "Control"))
+```
+Boxplot of raw counts
+
+```{r fig.cap="Zoox Count"}
+boxplot(ZooxPerMg ~ Menthol, data=dfCounts)
+```
+
+One-way ANOVA of the log-transformed zoox counts
+
+```{r}
+aov.zoox.log <- aov(ZooxPerMgLog ~ Menthol, data=dfCounts)
+summary(aov.zoox.log)
+meansTable <- model.tables(aov.zoox.log, "means", se=F)
+stdErr <- se.contrast(aov.zoox.log, list(Menthol == "Menthol", Menthol == "Control"))
+#means<- unclass(meansTable)
+mentholMean <- meansTable$tables$Menthol[1]
+controlMean <- meansTable$tables$Menthol[2]
+alogStdErr <- 2^stdErr
+alogMentholMean <- 2^mentholMean
+alogControlMean <- 2^controlMean
+foldChange <- 2^(mentholMean - controlMean)
+alogStdErr
+alogMentholMean
+alogControlMean
+foldChange
+```
+
+\newpage
+Boxplot of log-transformed counts
+
+```{r fig.cap="Zoox Count"}
+boxplot(ZooxPerMgLog ~ Menthol, data=dfCounts)
+```
+

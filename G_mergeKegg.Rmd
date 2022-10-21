@@ -1,0 +1,174 @@
+---
+title: "G_mergeKegg.rmd"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library("dplyr")
+library("tidyr")
+library("knitr")
+library("pander")
+library("kableExtra")
+```
+
+Load Up/Down Summary from D_upDownSummary.Rmd
+```{r}
+load("D_upDownSummary.RData")
+```
+
+Gene/KEGG Pathway associations use NCBI gene IDs. Load NCBI Gene IDs to map AIP genes to NCBI. These were obtained by searching the NCBI Gene Database using organism Exaiptasia Pallida, then downloading as the tab-delimited file gene_result.txt.
+```{r}
+aipGenes <- read.delim("gene_result.txt", header=TRUE, sep="\t")
+```
+
+The NCBI tab-delimited file lists multiple comma-separated aliases. To use these in a merge, unnest them using the tidyr unnest function. This will create a separate row for each alias. Also create a separate data frame of just gene IDs and descriptions for use in later merges.
+```{r}
+aipGenes2 <- aipGenes %>% 
+  mutate(Aliases = strsplit(as.character(Aliases), ", ")) %>% 
+  unnest(Aliases)
+aipGenes3 <- subset(aipGenes2, select=c(GeneID, description, Aliases))
+geneIdsNames <- subset(aipGenes, select=c(GeneID, description))
+```
+
+Merge Up/Down Counts with NCBI Gene IDs
+```{r}
+keggCounts <- merge(bothCount,aipGenes3, by.x=0, by.y="Aliases", all.x=FALSE)
+```
+
+Load geneKegg.txt created by F_keggAnnotations.R and remove the "epa:"" prefix
+```{r}
+geneKegg <- read.delim("geneKegg.txt", header=FALSE)
+geneKegg$V1 <- gsub('epa:', '', geneKegg$V1)
+```
+
+Merge All Aiptasia genes with KEGG Annotations, and identify genes with and without KEGG annotations.
+```{r}
+keggGenes <- merge(geneIdsNames,geneKegg, by.x="GeneID", by.y="V1", all=TRUE)
+colnames(keggGenes) = c("GeneID","description","PathID","PathDesc")
+keggMissing <- subset(keggGenes, is.na(keggGenes$PathID), select=c(GeneID, description))
+keggPresent <- subset(keggGenes, !is.na(keggGenes$PathID), select=c(GeneID, description, PathID, PathDesc))
+write.csv(keggMissing, file="keggMissing.csv")
+write.csv(keggPresent, file="keggPresent.csv")
+```
+
+Merge KEGG Pathways and Up/Down Counts
+```{r}
+
+keggCounts2 <- merge(keggCounts,geneKegg, by.x="GeneID", by.y="V1", all.x=FALSE)
+colnames(keggCounts2) <- c("GeneID","GeneSymbol","countUpVibrio","countDownVibrio","countUpMenthol",
+                           "countDownMenthol","countUpInteraction","countDownInteraction",
+                           "GeneDesc","KEGG_ID","KEGG_Desc")
+```
+
+```{r}
+geneKegg$counter = 1
+keggGeneCounts <- aggregate(geneKegg$counter, list(kegg = geneKegg$V3), FUN=sum)
+colnames(keggGeneCounts) <- c("Pathway", "GenesInPathway")
+```
+
+Aggregate Up/Down Counts by KEGG Pathway
+```{r}
+keggCount3 <- subset(keggCounts2, select=c("countUpVibrio","countDownVibrio","countUpMenthol",
+                           "countDownMenthol","countUpInteraction","countDownInteraction","KEGG_Desc","GeneDesc"))
+keggSumm <- aggregate(. ~ KEGG_Desc, keggCount3, sum)
+keggSumm$TotalDE <- rowSums(keggSumm[,c("countUpVibrio","countDownVibrio","countUpMenthol",
+                           "countDownMenthol","countUpInteraction","countDownInteraction")], na.rm=TRUE)
+```
+
+#Up/Down Counts by KEGG Pathway
+V+, V-,M+, M-,I+, and I- are the counts of genes up for Vibrio, down for vibrio, up for menthol, down for menthol, up for interaction, and down for interaction. The DE Genes column is the sum of the up/down counts. The Genes in Path column is the total number of Aiptasia genes mapped to the pathway.
+```{r}
+keggSumm1 <- merge(keggSumm,keggGeneCounts, by.x="KEGG_Desc", by.y="Pathway", all.x=FALSE)
+#kable(keggSumm1, format="html") %>% kable_styling(bootstrap_options = c("bordered"), position="left")
+```
+
+Find out which combinations are present
+```{r}
+library("tidyr")
+#keggCount3$test<- c(keggCount3$countUpVibrio, keggCount3$countDownVibrio)
+metaFields <- c("countUpVibrio","countDownVibrio","countUpMenthol",
+                           "countDownMenthol","countUpInteraction","countDownInteraction")
+keggCount3$group <- do.call("paste", c(keggCount3[metaFields], sep = ""))
+unique(keggCount3$group)
+```
+
+```{r}
+keggCount3$Vu <- 0
+keggCount3$Vd <- 0
+keggCount3$Md <- 0
+keggCount3$Mu <- 0
+keggCount3$VdMd <- 0
+keggCount3$VuMu <- 0
+keggCount3$VuMd <- 0
+keggCount3$VuMuId <- 0
+keggCount3$Iu <- 0
+keggCount3$VdMu <- 0
+keggCount3$MdIu <- 0
+keggCount3$VdMdIu <- 0
+keggCount3$MuId <- 0
+
+keggCount3$Vu[keggCount3$group == '100000'] <- 1
+keggCount3$Vd[keggCount3$group == '010000'] <- 1
+keggCount3$Md[keggCount3$group == '000100'] <- 1
+keggCount3$Mu[keggCount3$group == '001000'] <- 1
+keggCount3$VdMd[keggCount3$group == '010100'] <- 1
+keggCount3$VuMu[keggCount3$group == '101000'] <- 1
+keggCount3$VuMd[keggCount3$group == '100100'] <- 1
+keggCount3$VuMuId[keggCount3$group == '101001'] <- 1
+keggCount3$Iu[keggCount3$group == '000010'] <- 1
+keggCount3$VdMu[keggCount3$group == '011000'] <- 1
+keggCount3$MdIu[keggCount3$group == '000110'] <- 1
+keggCount3$VdMdIu[keggCount3$group == '010110'] <- 1
+keggCount3$MuId[keggCount3$group == '001001'] <- 1
+
+countCols <- c("Vu", "Vd", "Md", "Mu", "VdMd", "VuMu", "VuMd", "VuMuId","Iu",
+"VdMu","MdIu","VdMdIu","MuId")
+countColsDesc <- c(countCols, "KEGG_Desc")
+```
+
+```{r}
+keggCount4 <- subset(keggCount3, select=c("KEGG_Desc","group", "GeneDesc"))
+```
+
+```{r}
+keggCount3 <- subset(keggCount3, select=countColsDesc)
+```
+
+```{r}
+keggSumm <- aggregate(. ~ KEGG_Desc, keggCount3, sum, na.rm=TRUE)
+keggSumm$TotalDE <- rowSums(keggSumm[,countCols], na.rm=TRUE)
+keggSumm <- aggregate(. ~ KEGG_Desc, keggCount3, sum)
+keggSumm$TotalDE <- rowSums(keggSumm[,countCols], na.rm=TRUE)
+keggSumm2 <- merge(keggSumm,keggGeneCounts, by.x="KEGG_Desc", by.y="Pathway", all.x=FALSE)
+write.csv(keggSumm2,file="keggSumm2.csv")
+kable(keggSumm2, format="html", caption='Counts by KEGG Pathway') %>% kable_styling(bootstrap_options = c("bordered"), position="left")
+```
+
+```{r}
+keggCount4$GroupName[keggCount4$group == '100000'] <- 'Vibrio Up'
+keggCount4$GroupName[keggCount4$group == '010000'] <- 'Vibrio Down'
+keggCount4$GroupName[keggCount4$group == '001000'] <- 'Menthol Up'
+keggCount4$GroupName[keggCount4$group == '000100'] <- 'Menthol Down'
+keggCount4$GroupName[keggCount4$group == '000010'] <- 'Interaction Up'
+keggCount4$GroupName[keggCount4$group == '000001'] <- 'Interaction Down'
+keggCount4$GroupName[keggCount4$group == '101000'] <- 'Vibrio Up, Menthol Up'
+keggCount4$GroupName[keggCount4$group == '100100'] <- 'Vibrio Up, Menthol Down'
+keggCount4$GroupName[keggCount4$group == '011000'] <- 'Vibrio Down, Menthol Up'
+keggCount4$GroupName[keggCount4$group == '010100'] <- 'Vibrio Down, Menthol Down'
+keggCount4$GroupName[keggCount4$group == '010110'] <- 'Vibrio Down, Menthol Down, Interaction Up'
+keggCount4$GroupName[keggCount4$group == '000110'] <- 'Menthol Down, Interaction Up'
+keggCount4$GroupName[keggCount4$group == '101001'] <- 'Vibrio Up, Menthol Up, Interaction Down'
+keggCount4$GroupName[keggCount4$group == '001001'] <- 'Menthol Up, Interaction Down'
+
+keggCount5 <- subset(keggCount4, select=c(KEGG_Desc, GroupName, GeneDesc))
+keggCount5 <- keggCount5[
+  with(keggCount5, order(KEGG_Desc, GroupName)),
+]
+
+head(keggCount5)
+kable(keggCount5, format="html", caption='Genes By Category') %>% kable_styling(bootstrap_options = c("bordered"), position="left")
+
+write.csv(keggCount5, file='keggCount5.csv')
+```

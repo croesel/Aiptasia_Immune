@@ -1,0 +1,13 @@
+---
+title: "iGraph"
+author: "Chuck Roesel"
+date: "4/6/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("igraph")
+library(igraph)
+```
+

@@ -1,0 +1,144 @@
+---
+title: "DESeq2 Up/Down Summary and Plots by KEGG Pathway"
+author: "Chuck Roesel"
+date: "01/31/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r Load Libraries, message=FALSE, warning=FALSE, paged.print=FALSE}
+load("D_upDownSummary.RData")
+#install.packages("grid")
+library("grid")
+library("UpSetR")
+library("stringr")
+library("gdata")
+library("tidyr")
+library("dplyr")
+library("knitr")
+library("pander")
+library("kableExtra")
+library("pheatmap")
+library("DESeq2")
+load("summarizedDeResults.RData")
+```
+```{r}
+sp_go <- read.table("goa_uniprot_all_noiea.gaf", header=FALSE, sep="\t", quote="", comment.char="!", stringsAsFactors=FALSE)
+```
+
+```{r}
+library("rlist")
+spKo <- read.table("keggOrth.tsv", header=FALSE, sep="\t", quote="", stringsAsFactors = FALSE)
+koGo <- merge(sp_go, spKo, by="V2")
+go.sets.ko <- list()
+for (goTerm in unique(koGo$V5.x)){
+  listEntry <- unique(koGo[koGo$V5.x == goTerm, ]$V6.y) 
+  goKey <- paste(goTerm, Term(goTerm))
+  go.sets.ko[[goKey]] <- listEntry
+}
+head(go.sets.ko)
+```
+
+
+```{r}
+library("gage")
+library("gageData")
+data("kegg.sets.ko")
+exprs <- counts(ddsAll)
+vibrio <- rownames(colData[colData$Vibrio == 'Vibrio',])
+noVibrio <- rownames(colData[colData$Vibrio == 'NoVibrio',])
+menthol <- rownames(colData[colData$Menthol == 'Menthol',])
+noMenthol <- rownames(colData[colData$Menthol == 'NoMenthol',])
+sampVibrio <- match(vibrio, colnames(exprs))
+sampMenthol <- match(menthol, colnames(exprs))
+refVibrio <- match(noVibrio, colnames(exprs))
+refMenthol <- match(noMenthol, colnames(exprs))
+#gageVibrio <- gage(exprs, kegg.sets.ko, ref=refVibrio, samp=sampVibrio, same.dir=TRUE)
+#gageMenthol <- gage(exprs, kegg.sets.ko, ref=refMenthol, samp=sampMenthol, same.dir=TRUE)
+goVibrio <- gage(exprs, go.sets.ko, ref=refMenthol, samp=sampMenthol, same.dir=FALSE)
+gageVibrio <- gage(exprs, kegg.sets.ko, ref=refVibrio, samp=sampVibrio, same.dir=FALSE)
+gageMenthol <- gage(exprs, kegg.sets.ko, ref=refMenthol, samp=sampMenthol, same.dir=FALSE)
+goVibrioUp <- as.data.frame(goVibrio$greater)
+vibrioUp <- as.data.frame(gageVibrio$greater)
+vibrioUp <- subset(vibrioUp, select=c("q.val"))
+goVibrioUp <- subset(goVibrioUp, select=c("q.val"))
+mentholUp <- as.data.frame(gageMenthol$greater)
+mentholUp <- subset(mentholUp, select=c("q.val"))
+#vibrioDown <- as.data.frame(gageVibrio$less)
+#vibrioDown <- subset(vibrioDown, q.val <= .05, select=c("p.val", "q.val", "set.size"))
+#mentholDown <- as.data.frame(gageMenthol$less)
+#mentholDown <- subset(mentholDown, q.val <= .05, select=c("p.val", "q.val", "set.size"))
+#vibrioUp <- subset(vibrioUp, q.val < .05 ,select=c("q.val"))
+colnames(vibrioUp) <- c("Vibrio")
+colnames(mentholUp) <- c("Menthol")
+#vibrioDown <- subset(vibrioDown, q.val < .05 ,select=c("q.val"))
+#colnames(vibrioDown) <- c("Vibrio Down")
+#vibrioDE <- merge(vibrioUp, vibrioDown, by=0, all=TRUE)
+#rownames(vibrioDE) <- vibrioDE$Row.names
+#vibrioDE <- subset(vibrioDE, select = c("Vibrio Up", "Vibrio Down"))
+#mentholUp <- subset(mentholUp, q.val < .05 ,select=c("q.val"))
+#colnames(mentholUp) <- c("Menthol Up")
+#mentholDown <- subset(mentholDown, q.val < .05 ,select=c("q.val"))
+#colnames(mentholDown) <- c("Menthol Down")
+#mentholDE <- merge(mentholUp, mentholDown, by=0, all=TRUE)
+#rownames(mentholDE) <- mentholDE$Row.names
+#mentholDE <- subset(mentholDE, select = c("Menthol Up", "Menthol Down"))
+both <- merge(vibrioUp, mentholUp, by=0)
+rownames(both) <- both$Row.names
+both <- subset(both, ((Vibrio < .05) | (Menthol < .05)) ,select = c("Vibrio", "Menthol"))
+goVibrioUp <- subset(goVibrioUp, q.val < .05)
+head(go.sets.ko)
+```
+
+```{r results='asis'}
+#alpha=.05
+#keggPathways <- read.table("koToPathway.tsv", sep='\t', header=TRUE, quote='')
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=TRUE, results='asis'}
+summarizeSearch <- function(searchText){
+  logThreshold=0
+  alpha=.05
+  #pathSearch = grep(searchText, keggPathways$PathDesc)
+  #pathDescriptions <- sort(unique(keggPathways$PathDesc[pathSearch]))
+  #searchGenes <- sort(unique(inDE$Gene[pathSearch]))
+  genes <- unlist(kegg.sets.ko[pathDesc], use.names=FALSE)
+  dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% genes)
+  #head(dfBothAnnot)
+  #genesInPath <- length(searchGenes)
+  deInPath <- length(rownames(dfBothAnnotSearch))
+    searchTitle <- searchText
+    #cat("#", searchTitle, "\n")
+    upVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio > logThreshold))
+    downVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio < logThreshold))
+    upMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol > logThreshold))
+    downMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol < logThreshold))
+    upInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter > logThreshold))
+    downInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter < logThreshold))
+    listInput = list(UpVibrio = rownames(upVibrio), UpMenthol
+                   = rownames(upMenthol), DownVibrio=rownames(downVibrio), 
+                   DownMenthol=rownames(downMenthol), UpInteraction=rownames(upInter), DownInteraction=rownames(downInter))
+    upset(fromList(listInput), order.by = "freq", nsets=6)
+    grid.text(searchTitle,x = 0.65, y=0.95, gp=gpar(fontsize=12))
+    dfTable = subset(dfBothAnnotSearch, select = c("GeneDesc", "lfc.Vibrio", "lfc.Menthol", "lfc.Inter"))
+    rownames(dfTable) <- dfTable$GeneDesc
+    dfTable$lfc.Vibrio[is.na(dfTable$lfc.Vibrio)] <- 0
+    dfTable$lfc.Menthol[is.na(dfTable$lfc.Menthol)] <- 0
+    dfTable$lfc.Inter[is.na(dfTable$lfc.Inter)] <- 0
+    dfTable <- select(dfTable, select = c("lfc.Vibrio", "lfc.Menthol", "lfc.Inter"))
+    colnames(dfTable) = c("LFC Vibrio", "LFC Menthol", "LFC Interaction")
+    print(kable(dfTable, format='html'))
+}
+cat("#", "DE Vibrio", "\n")
+kable(vibrioDE)
+for (pathDesc in rownames(vibrioDE)){
+  tryCatch({summarizeSearch(pathDesc)}, error=function(e){})
+}
+cat("#", "DE Menthol", "\n")
+kable(mentholDE)
+for (pathDesc in rownames(mentholDE)){
+  tryCatch({summarizeSearch(pathDesc)}, error=function(e){})
+}
+
+```

@@ -1,0 +1,149 @@
+---
+title: "Figures"
+author: "Chuck Roesel"
+date: "4/14/2018"
+output:
+  pdf_document:
+    df_print: kable
+    keep_tex: true
+  word_document: default
+classoption: portrait
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(
+	echo = F,
+	message = FALSE,
+	warning = FALSE,
+	options(knitr.kable.NA = '')
+)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(pander)
+library(UpSetR)
+library(pathview)
+library(igraph)
+library(ggplot2)
+require(gridExtra)
+library(reshape2)
+library(latexpdf)
+library(data.table)
+library(cowplot)
+library(DESeq2)
+library(goseq)
+library(grid)
+#library(pheatmap)
+library(stringr)
+
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaFigsAndTables.RData")
+```
+
+
+```{r}
+selectedCategories <- c("Signaling molecules and interaction", "Transport and catabolism", "Immune system", "Cell growth and death")
+pathCategoriesSel <- subset(pathCategories2, Category %in% selectedCategories)
+kegg2 <- unique(subset(dfBestAllAnnotPath,PathDesc %in%  pathCategoriesSel$PathDesc,select=c("KX","PathDesc" )))
+resVibrioSel <- merge(as.data.frame(resVibrio), kegg2, by.x=0, by.y="KX")
+resVibrioSel <- subset(resVibrioSel, !is.na(padj))
+resMentholSel <- merge(as.data.frame(resMenthol), kegg2, by.x=0, by.y="KX")
+resMentholSel <- subset(resMentholSel, !is.na(padj))
+pathLfc <- aggregate(log2FoldChange ~ PathDesc,data=resVibrioSel, FUN=median)
+pathPadj <- aggregate(padj ~ PathDesc,data=resVibrioSel, FUN=median)
+pathLfc <- arrange(pathLfc, desc(log2FoldChange))
+pathPadj <- arrange(pathPadj, padj)
+#kable(pathLfc, caption="Median LFC by Pathway")
+#hist(pathLfc$log2FoldChange)
+#kable(pathPadj, caption="Median padj by Pathway")
+#hist(pathPadj$padj)
+deList2 <- data.frame(DE=as.integer(resVibrioSel$padj < .05), PathDesc=resVibrioSel$PathDesc, Total=1)
+deCounts <- aggregate(. ~ PathDesc, data=deList2, FUN=sum)
+deCounts$PctDE <- deCounts$DE/deCounts$Total
+transcriptLength <- data.frame(KX=names(dna), length=width(dna))
+kegg <- as.character(kegg2$PathDesc)
+names(kegg) <- as.character(kegg2$KX)
+#arrange(deCounts, desc(PctDE))
+#hist(deCounts$PctDE)
+```
+
+```{r}
+deListV <- data.frame(KX=resVibrioSel$Row.names, DE=as.integer(resVibrioSel$padj < .05))
+transcriptLengthV <- unique(merge(transcriptLength, deListV, by.x="KX", by.y="KX"))
+lengthDataV <- subset(transcriptLengthV, select=c("KX", "length", "DE"))
+genesV <- transcriptLengthV$DE
+names(genesV) <- as.character(transcriptLengthV$KX)
+geneLengthV <- transcriptLengthV$length
+names(geneLengthV) <- as.character(transcriptLengthV$KX)
+pwfV=nullp(genesV,bias.data = geneLengthV, plot.fit=F)
+KEGGV=goseq(pwfV,gene2cat=kegg2)
+KEGGV$padj=p.adjust(KEGGV$over_represented_pvalue, method="BH")
+KEGGV <- subset(KEGGV, select=c("category", "padj"))
+colnames(KEGGV) <- c("PathDesc", "oeV")
+deListM <- data.frame(KX=resMentholSel$Row.names, DE=as.integer(resMentholSel$padj < .05))
+transcriptLengthM <- unique(merge(transcriptLength, deListM, by.x="KX", by.y="KX"))
+lengthDataM <- subset(transcriptLengthM, select=c("KX", "length", "DE"))
+genesM <- transcriptLengthM$DE
+names(genesM) <- as.character(transcriptLengthM$KX)
+geneLengthM <- transcriptLengthM$length
+names(geneLengthM) <- as.character(transcriptLengthM$KX)
+pwfM=nullp(genesM,bias.data = geneLengthM, plot.fit=F)
+KEGGM=goseq(pwfM,gene2cat=kegg2)
+KEGGM$padj=p.adjust(KEGGM$over_represented_pvalue, method="BH")
+KEGGM <- subset(KEGGM, select=c("category", "padj"))
+colnames(KEGGM) <- c("PathDesc", "oeM")
+KEGGMV <- arrange(merge(KEGGV, KEGGM), oeV, oeM)
+KEGGMV$oeV[KEGGMV$oeV > .2] <- NA
+KEGGMV$oeM[KEGGMV$oeM > .2] <- NA
+#KEGGMV
+```
+
+
+
+```{r}
+dfKegg <- data.frame(unlist(kegg.sets.ko))
+pathByName <- function(id) {
+#id <- unlist(strsplit(pathway, " "))[1]
+pathFile <- id
+#genes <- unlist(kegg.sets.ko[pathway], use.names=FALSE)
+genes <- as.character(dfKegg[grep(id,rownames(dfKegg), value=T),])
+dfBothAnnotSearchV <- subset(dfBestAllAnnot, rownames(dfBestAllAnnot) %in% 
+                               genes & VibrioPadj < .05)
+dfBothAnnotSearchM <- subset(dfBestAllAnnot, rownames(dfBestAllAnnot) %in% 
+                               genes & MentholPadj < .05)
+dfBothAnnotSearchN <- subset(dfBestAllAnnot, rownames(dfBestAllAnnot) %in% 
+                               genes)
+bestN <- subset(dfBothAnnotSearchN, select=c())
+bestV <- subset(dfBothAnnotSearchV, select=c("VibrioLFC"))
+bestM <- subset(dfBothAnnotSearchM, select=c("MentholLFC"))
+best <- merge(bestV, bestM, by=0, all=T)
+rownames(best) <- best$Row.names
+best <- subset(best, select=-c(Row.names))
+best[is.na(best)] <- 0
+best <- merge(best, bestN, by=0, all=T)
+rownames(best) <- best$Row.names
+best <- subset(best, select=-c(Row.names))
+best[is.na(best)] <- 0
+write.csv(dfBothAnnotSearchV, file=paste0(pathFile, 'dfBothAnnotSearchV','.csv'))
+write.csv(dfBothAnnotSearchM, file=paste0(pathFile, 'dfBothAnnotSearchM','.csv'))
+write.csv(dfBothAnnotSearchN, file=paste0(pathFile, 'dfBothAnnotSearchN','.csv'))
+pv.out <- pathview(best, pathway.id = id, kegg.dir = 'keggImages/', 
+                   species = "ko", out.suffix = 'egsea',
+                   keys.align = "y", kegg.native = T, match.data = T, 
+                   multi.state = T, same.layer = T, map.symbol=T, na.col = "gray", mid =
+                     list(gene = "white", cpd = "white"), low =
+                     list(gene = "blue", cpd = "blue"))
+
+}
+```
+
+
+```{r}
+pathByName("ko04115")
+```
+

@@ -1,0 +1,45 @@
+---
+title: "CompareDEAnnot"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(DESeq2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaFigsAndTables.RData")
+tx2gene <- read.csv("tx2gene.csv", header=FALSE)
+colnames(tx2gene) <- c("Transcript", "Gene")
+```
+
+```{r}
+for (resultName in resultsNames(ddsAll)){
+    resNoAnnot <- results(ddsAllNoAnnot, alpha=.05, name=resultName)
+    resAnnot <- results(ddsAll, alpha=.05, name=resultName)
+    noAnnot <- subset(resNoAnnot, select=c("log2FoldChange","padj"))
+    annot <- subset(resAnnot, select=c("log2FoldChange","padj"))
+    noAnnot <- data.frame(noAnnot)
+    annot <- data.frame(annot)
+    addAnnot <- merge(noAnnot, tx2gene, by.x=0, by.y="Transcript")
+    addAnnot <- merge(addAnnot, annot, by.x="Gene", by.y=0, all=T)
+    write.csv(addAnnot, file=paste0(resultName, '.csv'))
+    transcriptCount <- aggregate(Row.names ~ Gene, data = addAnnot, FUN = NROW)
+    singleTranscriptCount <- subset(transcriptCount, Row.names==1)
+    singleTranscriptDE <- subset(addAnnot, Gene %in% singleTranscriptCount$Gene )
+    v2 <- na.omit(singleTranscriptDE)
+    v2$logpadj.x <- log(v2$padj.x)
+    v2$logpadj.y <- log(v2$padj.y)
+    plot(v2$log2FoldChange.x, v2$log2FoldChange.y)
+    plot(v2$logpadj.x, v2$logpadj.y)
+    cor.test(v2$log2FoldChange.x, v2$log2FoldChange.y)
+    write.csv(singleTranscriptDE, file=paste0(resultName, 'noDup.csv'))
+}
+```

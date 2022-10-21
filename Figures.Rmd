@@ -1,0 +1,104 @@
+---
+fontsize: 12pt
+mainfont: Lato
+geometry: "left=2.5cm,right=2.5cm,top=3cm,bottom=3cm"
+documentclass: "article"
+header-includes:
+  - \usepackage{indentfirst}
+  - \usepackage[style=apa,backend=biber]{biblatex}
+  - \usepackage{setspace}\doublespacing
+  - \usepackage[left]{lineno}
+  - \newcommand{\beginsupplement}{\setcounter{table}{0}  \renewcommand{\thetable}{S\arabic{table}} \setcounter{figure}{0} \renewcommand{\thefigure}{S\arabic{figure}}}
+output:
+  pdf_document:
+    includes:
+      in_header: header.tex 
+    latex_engine: xelatex
+    fig_caption: true
+    keep_tex: true
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+bibliography: Aiptasia.bib
+csl: molecular-ecology.csl
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+library(knitr)
+library(UpSetR)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(kableExtra)
+library(goseq)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+	echo = F,
+	message = FALSE,
+	warning = FALSE,
+	options(knitr.kable.NA = '')
+)
+load("AiptasiaFigsAndTables.RData")
+```
+### Tables and Figures
+
+\singlespacing
+
+
+```{r MDS2, echo=FALSE, fig.cap="Multidimensional scaling (MDS) plot of mRNA shows differences among treatments with *Vibrio* exposure separated primarily on axis 1 and menthol exposure separated along axis 2", fig.height=10,  fig.width=10, message=FALSE, warning=FALSE}
+par(mai=c(1,1,1,1))
+vCoords <- coords[colData$Vibrio == "Vibrio" & colData$Menthol == "NoMenthol",]
+nvCoords <- coords[colData$Vibrio == "NoVibrio"& colData$Menthol == "NoMenthol",]
+mvCoords <- coords[colData$Vibrio == "Vibrio" & colData$Menthol == "Menthol",]
+mnvCoords <- coords[colData$Vibrio == "NoVibrio"& colData$Menthol == "Menthol",]
+xlab <- paste0("nMDS 1 (",sprintf("%2.1f",100*env_all$factors$r[1]),"%)")
+ylab <- paste0("nMDS 2 (",sprintf("%2.1f",100*env_all$factors$r[2]),"%)")
+plot(NA,NA, xlab = xlab, ylab = ylab, type = "n", xlim = c(-0.1, 0.1), ylim = c(-0.1, 0.1), cex.lab=2, cex.axis=1.5)
+points(mvCoords[, 1], mvCoords[, 2], col="red", pch=17, cex=3)
+points(mnvCoords[, 1], mnvCoords[, 2], col="black", pch=17, cex=3)
+points(nvCoords[, 1], nvCoords[, 2], col="black", pch=16, cex=3)
+points(vCoords[, 1], vCoords[, 2], type = "p", col="red", pch=16, cex=3)
+v1 <- expression(italic("Vibrio")*" Menthol")
+v2 <- expression(italic("Vibrio")*" No Menthol")
+v3 <- expression("No "*italic("Vibrio")*" Menthol")
+v4 <- expression("No "*italic("Vibrio")*" No Menthol")
+legend(-.1,-.05, c(v1, v2, v3, v4), pch=c(17, 16, 17, 16), 
+       col=c("red", "red", "black", "black"), cex=1.5)
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coordsV <- ordiellipse(nmds_norm_hell, colData$Vibrio, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40)
+ellipse_coordsM <- ordiellipse(nmds_norm_hell, colData$Menthol, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40)
+v1 <- expression(italic("Vibrio"))
+v2 <- expression("No "*italic("Vibrio"))
+text(ellipse_coordsV$Vibrio$center[1],ellipse_coordsV$Vibrio$center[2], v1, cex=1.5)
+text(ellipse_coordsV$NoVibrio$center[1],ellipse_coordsV$NoVibrio$center[2], v2, cex=1.5)
+text(ellipse_coordsM$Menthol$center[1],ellipse_coordsM$Menthol$center[2], "Menthol", cex=1.5)
+text(ellipse_coordsM$NoMenthol$center[1],ellipse_coordsM$NoMenthol$center[2], "No Menthol", cex=1.5)
+ordiellipse(nmds_norm_hell, colData$Menthol, kind="se", conf=0.95, lwd=1, 
+            draw = "poly", col = c(NA), alpha = 40, label = F)
+ordiellipse(nmds_norm_hell, colData$Vibrio, kind="se", conf=0.95, lwd=1, 
+            draw = "poly", col = c("white"), alpha = 40, label = F)
+```
+
+\clearpage
+
+```{r UpSetAnnotA, fig.cap="UpSet plot of differentially expressed genes shows 2,155 genes up-regulated and 1,552 down-regulated for *Vibrio*, 353 genes down-regulated and  322 up-regulated for menthol, 230 genes up-regulated for both *Vibrio* and menthol (V+M+), 142 genes down-regulated for both *Vibrio* and menthol (V-M-), and 30 genes up-regulated for *Vibrio*, but down-regulated for menthol. Remaining groupings consisted of 21 or fewer genes. Red-shaded areas show differentially expressed genes with KEGG ortholog annotations."}
+annotatedGenes <- function(row) {
+  data <- (row["gene"] %in% dfBestAllAnnot$KX)
+}
+upset(bothCountNoAnnot, sets = c("InteractionDown","InteractionUp","MentholDown",
+                                 "MentholUp", "VibrioDown", "VibrioUp"), keep.order=T, 
+      queries = list(list(query = annotatedGenes, color = "red",
+                          active = T)),order.by = "freq")
+```
+
+

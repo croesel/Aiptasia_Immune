@@ -1,0 +1,138 @@
+---
+title: "DESeq2 Differential Expression Analysis"
+author: "Chuck Roesel"
+date: "01/30/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+##Load DESeq2 and Supporting Libraries
+```{r Load Libraries, message=FALSE, warning=FALSE, paged.print=FALSE}
+library("DESeq2")
+library("tximport")
+library("readr")
+library("rjson")
+library("DESeq2")
+```
+
+```{r}
+geneDesc <- read.table("koDesc.tsv", sep='\t', header=TRUE, quote='')
+rownames(geneDesc) = geneDesc$Gene
+geneDesc <- subset(geneDesc, select=c(GeneDesc))
+write.csv(geneDesc, file='diag.csv')
+```
+
+```{r}
+tx2gene <- read.csv("tx2gene.csv")
+dir <- 'quants'
+samples <- list.files(dir)
+files <- file.path(dir, samples, "quant.sf")
+txi.salmon <- tximport(files, type = "salmon", tx2gene=tx2gene)
+colData <- read.csv("Samples.csv", row.names=1)
+colData$Menthol <- gsub("Control","NoMenthol",colData$Menthol)
+colData$Vibrio <- gsub("Control","NoVibrio",colData$Vibrio)
+colData <- colData[with(colData, order(row.names(colData))), ]
+
+```
+##New DESeq2 Data Set from tximport
+Create a new DESeq data set from Salmon counts using tximport. colData contains the treatment information for each sample. There are four treatment groups and six replicates per group.
+
+|          | NoMenthol    | Menthol     |
+| -------- |:------------:|:-----------:|
+| **NoVibrio** | 6 Replicates |6 Replicates |
+| **Vibrio**   | 6 Replicates |6 Replicates |
+
+design specifies the conditions we want to evaluate. The relevel function sets the control treatment. Unless specified by relevel, DESeq2 assumes the first in alphabetical order is the control treatment.
+```{r}
+ddsAll <- DESeqDataSetFromTximport(txi.salmon,
+                                    colData = colData,
+                                    design = ~ Vibrio + Menthol + Menthol:Vibrio)
+ddsAll$Menthol <- relevel(ddsAll$Menthol, ref="NoMenthol")
+ddsAll$Vibrio <- relevel(ddsAll$Vibrio, ref="NoVibrio")
+```
+##Remove low counts
+DESeq2 normalization can handle genes with low read counts, but pre-filtering them reduces memory use and speeds up processing. We'll only keep rows where the sum of read counts is greater than 10. We'll use the nrow function to show the number of rows before and after pre-filtering.
+```{r}
+nrow(counts(ddsAll))
+ddsAll <- ddsAll[ rowSums(counts(ddsAll)) > 10, ]
+nrow(counts(ddsAll))
+```
+##Run DESeq
+Now that we've constructed a DESeq data set, we can run differential expression analysis using the DESeq function.
+```{r, echo=TRUE}
+ddsAll <- DESeq(ddsAll)
+```
+##Get Result Names
+We have a multi-factor design, so use the resultsNames function to get the names.
+```{r, echo=TRUE}
+resultsNames(ddsAll)
+```
+##Get Results as data frames
+To simplify some down-stream analysis, get the results where the adjusted p-value is less than .05, and save as data frames.
+```{r, echo=TRUE}
+resVibrio <- results(ddsAll, alpha=.05, name="Vibrio_Vibrio_vs_NoVibrio")
+resMenthol <- results(ddsAll, alpha=.05, name="Menthol_Menthol_vs_NoMenthol")
+resInter <- results(ddsAll, alpha=.05, name="VibrioVibrio.MentholMenthol")
+dfVibrio <- as.data.frame(resVibrio)
+dfMenthol <- as.data.frame(resMenthol)
+dfInter <- as.data.frame(resInter)
+```
+##Check the Vibrio results data frame
+```{r}
+head(subset(dfVibrio, padj < .05))
+```
+##Check the Menthol results data frame
+```{r}
+head(subset(dfMenthol, padj < .05))
+```
+##Check the Inter results data frame
+```{r}
+head(subset(dfInter, padj < .05))
+```
+
+##Select the columns we need from Vibrio results
+The columns we need from each result set are the log2 fold change and the adjusted p-value.
+```{r}
+dfVibrio <- subset(subset(dfVibrio, padj < .05, select=c(log2FoldChange, padj)))
+head(dfVibrio)
+```
+##Select the columns we need from Menthol results
+```{r}
+dfMenthol <- subset(subset(dfMenthol, padj < .05, select=c(log2FoldChange, padj)))
+head(dfMenthol)
+```
+##Select the columns we need from Menthol results
+```{r}
+dfInter <- subset(subset(dfInter, padj < .05, select=c(log2FoldChange, padj)))
+head(dfInter)
+```
+
+Merge the Menthol and Vibrio results so we can determine which genes are differentially expressed in the same or opposite directions for Menthol and Vibrio. by=0 indicates merge on rowname. suffixes indicate how to differentiate columns which have the same name in the data frames to be merged. The merge function creates a redundant Row.names column, so delete it. 
+```{r}
+dfBoth <- merge(dfMenthol, dfVibrio, by=0, suffixes = c(".Menthol",".Vibrio"), all=TRUE)
+rownames(dfBoth) <- dfBoth$Row.names
+dfBoth <- subset(dfBoth, select = -c(Row.names) )
+head(dfBoth)
+```
+
+```{r}
+dfBoth <- merge(dfBoth, dfInter, by=0, all=TRUE)
+rownames(dfBoth) <- dfBoth$Row.names
+dfBoth <- subset(dfBoth, select = -c(Row.names) )
+colnames(dfBoth) <- c("lfc.Menthol", "padj.Menthol", "lfc.Vibrio", "padj.Vibrio", "lfc.Inter", "padj.Inter")
+head(dfBoth)
+```
+##Merge Annotations Merge the gene-level descriptions.
+```{r}
+dfBothAnnot <- merge(dfBoth, geneDesc,by=0, all.x=TRUE)
+rownames(dfBothAnnot) <- dfBothAnnot$Row.names
+dfBothAnnot <- subset(dfBothAnnot, select = -c(Row.names) )
+head(dfBothAnnot)
+```
+##Write summarizedDeResults Save the summarized results to use in the scripts that follow.
+```{r}
+
+write.csv(dfBothAnnot, file="dfBothAnnot.csv")
+save(ddsAll, txi.salmon, dfBothAnnot, resVibrio, resMenthol, resInter, file="summarizedDeResults.RData")
+```

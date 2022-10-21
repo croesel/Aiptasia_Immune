@@ -1,0 +1,231 @@
+---
+title: "Minutum RNA-Seq Reads"
+output:
+  pdf_document:
+    fig_caption: true
+  html_document:
+    df_print: paged
+  md_document:
+    variant: gfm
+    df_print: paged
+  word_document: default
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+---
+```{r global_options, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, results='asis')
+```
+
+
+```{r}
+figNum <- 0;
+library("knitr")
+library("kableExtra")
+library("grid")
+library("UpSetR")
+library("stringr")
+library("gdata")
+library("tidyr")
+library("dplyr")
+library("knitr")
+library("pander")
+library("pheatmap")
+library("DESeq2")
+library("rjson")
+library("tximport")
+library("readr")
+library("Biostrings")
+library("pathview")
+library("EBImage")
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+```
+```{r}
+#Read in the Trimmomatic STDERR file
+trimLog <- read.table("trim.err", sep='\n', header=FALSE, quote='')
+#Get sample names
+sample <- str_match(trimLog$V1, "(Aip[0-9NA]{2})")[, 2]
+#Get input pairs
+input <- as.numeric(str_match(trimLog$V1, "Pairs: (.*?) ")[, 2])
+#Get output pairs
+passed <- as.numeric(str_match(trimLog$V1, "Surviving: (.*?) ")[, 2])
+#Get rid of NA
+sample <- sample[!is.na(sample)]
+passed <- passed[!is.na(passed)]
+input <- input[!is.na(input)]
+#Combine into data frame
+dfLog <- data.frame("Sample"=unlist(sample), "In"=unlist(input), "Out" =unlist(passed), stringsAsFactors = F)
+dfLog <- subset(dfLog, Sample != "AipNA")
+#Calculate percent passing quality filter
+dfLog$Percent <- with(dfLog, Out/In)
+```
+
+
+
+```{r}
+alpha <- .05
+logThreshold <- .05
+dna <- readDNAStringSet("Minutum/minutumTrans.fa")
+```
+
+```{r}
+tx2geneNoAnnot <- data.frame(Transcript=names(dna), Gene=names(dna))
+tx2geneNoAnnot <- tx2geneNoAnnot %>% separate(Transcript, c("Transcript", "Gene"), " gene=")
+tx2geneNoAnnot <- tx2geneNoAnnot %>% separate(Gene, c("Gene", "CDS"), " CDS=")
+```
+
+```{r}
+dir <- 'Minutum/quants/'
+samples <- list.files(dir)
+files <- file.path(dir, samples, "quant.sf")
+```
+```{r}
+colData <- read.csv("Samples.csv", row.names=1)
+colData$Menthol <- gsub("Control","NoMenthol",colData$Menthol)
+colData$Vibrio <- gsub("Control","NoVibrio",colData$Vibrio)
+colData <- colData[with(colData, order(row.names(colData))), ]
+```
+```{r}
+counts.salmon <- tximport(files, type = "salmon", tx2gene=tx2geneNoAnnot)
+Aligned <- unlist(colSums(counts.salmon$counts))
+dfLog$Aligned <- unlist(colSums(counts.salmon$counts))
+dfLog$AlignedPct <- with(dfLog, Aligned/Out)
+dfLogAndCol <- merge(dfLog, colData, by.x="Sample", by.y=0)
+```
+
+
+```{r}
+dfAov <- subset(dfLogAndCol, select=c("Aligned", "Vibrio", "Menthol"))
+dfAov$Vibrio <- as.factor(dfAov$Vibrio)
+dfAov$Menthol <- as.factor(dfAov$Menthol)
+dfAov <- as.data.frame(dfAov)
+reads.aov <- aov(Aligned ~ Vibrio + Menthol + Vibrio:Menthol, dfAov)
+alignSumm <- summary(reads.aov)
+dfAlignSumm <- as.data.frame(unclass(alignSumm))
+```
+
+```{r}
+dfAovTrim <- subset(dfLogAndCol, select=c("Out", "Vibrio", "Menthol"))
+dfAovTrim$Vibrio <- as.factor(dfAovTrim$Vibrio)
+dfAovTrim$Menthol <- as.factor(dfAovTrim$Menthol)
+dfAovTrim <- as.data.frame(dfAovTrim)
+reads.aovTrim <- aov(Out ~ Vibrio + Menthol + Vibrio:Menthol, dfAovTrim)
+trimSumm <- summary(reads.aovTrim)
+dfTrimSumm <- as.data.frame(unclass(trimSumm))
+```
+
+\newpage
+
+```{r}
+dfLogAndCol$Out <- prettyNum(dfLogAndCol$Out, big.mark=",", scientific=F)
+#Format percent
+dfLogAndCol$AlignedPct <- sprintf("%2.1f",100*dfLogAndCol$AlignedPct)
+dfLogAndCol$Percent <- sprintf("%2.1f",100*dfLogAndCol$Percent)
+#Format large numbers with comma separators
+dfLogAndCol$Aligned <- prettyNum(dfLogAndCol$Aligned, big.mark=",", scientific=F)
+dfLogAndCol$In <- prettyNum(dfLogAndCol$In, big.mark=",", scientific=F)
+kable(dfLogAndCol, col.names=c("Sample", "Read Pairs In", "Read Pairs Out", "Percent", "Aligned", "Aligned Percent", "Menthol", "Vibrio"), 
+      align=c(rep('r', 2), rep('r', 3), rep('r', 4)), caption="Read Trimming and Alignment Summary")
+
+```
+
+\newpage
+
+```{r}
+kable(dfAlignSumm, caption="Table S2: Two-way ANOVA, read alignments")
+```
+
+\newpage
+
+```{r}
+txi.salmon <- tximport(files, type = "salmon", tx2gene=tx2geneNoAnnot)
+ddsAll <- DESeqDataSetFromTximport(txi.salmon,
+                                   colData = colData,
+                                   design = ~ Vibrio + Menthol + Menthol:Vibrio)
+ddsAll$Menthol <- relevel(ddsAll$Menthol, ref="NoMenthol")
+ddsAll$Vibrio <- relevel(ddsAll$Vibrio, ref="NoVibrio")
+##Remove low counts
+ddsAll <- ddsAll[ rowSums(counts(ddsAll)) > 10, ]
+##Run DESeq
+ddsAllNoAnnot <- DESeq(ddsAll)
+```
+
+
+```{r}
+ddsAllNoAnnot <- estimateSizeFactors(ddsAllNoAnnot)
+counts_norm_hell <- decostand(t(counts(ddsAllNoAnnot, normalized=TRUE)), "hell")
+```
+
+```{r PERMANOVA}
+counts_norm_hell <- decostand(t(counts(ddsAllNoAnnot, normalized=TRUE)), "hell")
+
+permanova <- adonis(counts_norm_hell ~ Vibrio * Menthol, 
+                     data = colData)
+kable(permanova$aov.tab, caption="Transcriptome-Wide Expression (PERMANOVA)")
+```
+
+\newpage
+
+```{r}
+nmds_norm_hell <- metaMDS(comm = counts_norm_hell, autotransform = TRUE, 
+                          parallel = 48, trymax = 10^4, maxit = 10^4, expand=TRUE, trace=F)
+coords <- nmds_norm_hell$points
+phenos <- new("AnnotatedDataFrame", data=colData)
+env_all <- envfit(nmds_norm_hell,
+                  env = subset(colData, 
+                               select = c("Vibrio", "Menthol")))
+```
+
+
+\newpage
+
+```{r MDS, fig.height = 10, fig.width = 10, fig.cap="MDS Transcriptome-Wide Expression Patterns"}
+
+vCoords <- coords[colData$Vibrio == "Vibrio" & colData$Menthol == "NoMenthol",]
+nvCoords <- coords[colData$Vibrio == "NoVibrio"& colData$Menthol == "NoMenthol",]
+mvCoords <- coords[colData$Vibrio == "Vibrio" & colData$Menthol == "Menthol",]
+mnvCoords <- coords[colData$Vibrio == "NoVibrio"& colData$Menthol == "Menthol",]
+xlab <- paste0("nMDS 1 (",sprintf("%2.1f",100*env_all$factors$r[1]),"%)")
+ylab <- paste0("nMDS 2 (",sprintf("%2.1f",100*env_all$factors$r[2]),"%)")
+plot(NA,NA, xlab = xlab, ylab = ylab, type = "n", xlim = c(-0.1, 0.1), ylim = c(-0.1, 0.1))
+points(mvCoords[, 1], mvCoords[, 2], col="red", pch=2)
+points(mnvCoords[, 1], mnvCoords[, 2], col="black", pch=2)
+points(nvCoords[, 1], nvCoords[, 2], col="black", pch=3)
+points(vCoords[, 1], vCoords[, 2], type = "p", col="red", pch=3)
+legend(-.1,-.05, c("Vibrio Menthol", "Vibrio No Menthol", "No Vibrio Menthol", "No Vibrio No Menthol"), pch=c(2, 3, 2, 3), col=c("red", "red", "black", "black"), cex=1)
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_hell, colData$Vibrio, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+ordiellipse(nmds_norm_hell, colData$Menthol, kind="se", conf=0.95, lwd=2, 
+            draw = "poly", col = c("blue"), alpha = 40, label = TRUE)
+
+ordiellipse(nmds_norm_hell, colData$Vibrio, kind="se", conf=0.95, lwd=2, 
+            draw = "poly", col = c("red"), alpha = 40, label = TRUE)
+```
+```{r}
+resMenthol <- results(ddsAllNoAnnot, alpha=.05, name="Menthol_Menthol_vs_NoMenthol")
+dfMenthol <- data.frame(resMenthol)
+dfMenthol <- subset(dfMenthol, padj < .05, select=c("log2FoldChange", "padj"))
+kable(dfMenthol, caption="DE Genes, Menthol")
+summary(resMenthol)
+```
+
+```{r}
+resVibrio <- results(ddsAllNoAnnot, alpha=.05, name="Vibrio_Vibrio_vs_NoVibrio")
+dfVibrio <- data.frame(resVibrio)
+dfVibrio <- subset(dfVibrio, padj < .05, select=c("log2FoldChange", "padj"))
+kable(dfVibrio, caption="DE Vibrio")
+```
+
+```{r}
+resBoth <- results(ddsAllNoAnnot, alpha=.05, name="VibrioVibrio.MentholMenthol")
+dfBoth <- data.frame(resBoth)
+dfBoth <- subset(dfBoth, padj < .05, select=c("log2FoldChange", "padj"))
+kable(dfBoth, caption="DE, Interaction")
+```

@@ -1,0 +1,22 @@
+---
+title: "ParseGenomeAnnotations"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+To compare the results using the published genome annotations, supplemental data set 
+
+http://www.pnas.org/highwire/filestream/620313/field_highwire_adjunct_files/1/pnas.1513318112.sd01.xlsx
+
+was downloaded and sheet S1.1 was saved in .csv format. The 
+
+```{r}
+genomeAnnotations <- read.csv("pnas.1513318112.sd01.csv", header=T)
+```
+```{r}
+rownames(genomeAnnotations) <- genomeAnnotations$Gene.identifier
+head(genomeAnnotations)
+```

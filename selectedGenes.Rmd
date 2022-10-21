@@ -1,0 +1,40 @@
+---
+title: "DESeq2 Up/Down Summary and Plots"
+author: "Chuck Roesel"
+date: "10/28/2017"
+output: html_document
+---
+##Instructions
+Write an R script named selectedGenes.R and add the code shown below. Run line-by-line and check the output.
+
+##Clear Environment Variables
+```{r Clear Environment}
+rm(list=ls())
+```
+
+##Load Summarized DE Results
+```{r}
+load("summarizedDeResults.RData")
+```
+##Read Annotation Files
+```{r}
+spAnnot <- read.delim("proteinGeneGo.txt", sep="\t", header=FALSE)
+```
+##Set Column Names
+```{r}
+colnames(spAnnot) = c("Gene", "Protein", "GeneDesc", "GO")
+```
+##Select Desired Columns
+```{r}
+goDesc <- subset(spAnnot, select=c(GO, Gene))
+```
+##Find Immune-Related
+```{r}
+immune <- goDesc[grep("immune", goDesc$GO),]
+immuneGenes<-unique(immune$Gene)
+immuneDE <- dfBothAnnot[row.names(dfBothAnnot) %in% immuneGenes, ]
+colnames(immuneDE) <- c("lfcM", "pM", "lfcV", "pV", "Desc")
+rownames(immuneDE) <- paste(rownames(immuneDE), immuneDE$Desc, sep='-')
+immuneDE <- subset(immuneDE, select = c(lfcM, pM, lfcV, pV) )
+write.csv(immuneDE, file="ImmuneRelated.csv")
+```

@@ -1,0 +1,276 @@
+---
+fontsize: 12pt
+mainfont: Lato
+geometry: "left=2.5cm,right=2.5cm,top=3cm,bottom=3cm"
+documentclass: "article"
+header-includes:
+  - \usepackage{indentfirst}
+  - \usepackage[style=apa,backend=biber]{biblatex}
+  - \usepackage{setspace}\doublespacing
+  - \usepackage[left]{lineno}
+  - \newcommand{\beginsupplement}{\setcounter{table}{0}  \renewcommand{\thetable}{S\arabic{table}} \setcounter{figure}{0} \renewcommand{\thefigure}{S\arabic{figure}}}
+output:
+  word_document: default
+  pdf_document:
+    includes:
+      in_header: header.tex 
+    latex_engine: xelatex
+    fig_caption: true
+    keep_tex: true
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+bibliography: Aiptasia.bib
+csl: molecular-ecology.csl
+---
+\singlespacing
+\linenumbers
+\clearpage
+
+**Title: Differential gene expression analysis of symbiotic and aposymbiotic *Aiptasia* anemones under immune challenge with *Vibrio coralliilyticus***
+\newline
+
+Charles L. Roesel and Steven V. Vollmer
+\newline
+
+Northeastern University, Marine Science Center, Nahant, MA USA
+\newline
+\newline
+
+Corresponding Author:
+
+Charles L. Roesel
+
+Northeastern University  
+Marine Science Center  
+430 Nahant Rd.  
+Nahant, MA, USA  
+Email: croesel@gmail.com  
+Fax: 
+\newline
+
+Keywords: Cnidarian, immune, gene expression, transcriptome, *Aiptasia*, symbiotic, aposymbiotic
+
+Running Title: DGE analysis of symbiotic and aposymbiotic *Aiptasia* under immune challenge
+
+\clearpage
+
+\doublespacing
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+library(knitr)
+library(UpSetR)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(kableExtra)
+library(goseq)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+	echo = F,
+	message = FALSE,
+	warning = FALSE,
+	options(knitr.kable.NA = '')
+)
+load("AiptasiaFigsAndTables.RData")
+```
+\setlength{\parindent}{0.2in}
+
+\newpage
+
+### Abstract
+
+Anthozoans are a class of Cnidarians that includes scleractinian corals, anemones and their relatives. Despite a global rise in disease epizootics impacting scleractinian corals, little is known about the immune response of this key group of invertebrates. To better characterize the anthozoan immune response, we used the model anemone *Exaiptasia pallida*, hereafter referred to as *Aiptasia*, to explore the genetic links between the anthozoan-algal symbioses and immunity in a two-factor RNA-Seq experiment using menthol-bleached *Aiptasia* exposed to the bacterial pathogen *Vibrio coralliilyticus*. Multivariate and univariate analyses of *Aiptasia* gene expression demonstrated that exposure to live *Vibrio coralliilyticus* and menthol had strong and significant impacts on transcriptome-wide gene expression that are independent or additive in their effects, but not interactive. *Vibrio* exposure had the strongest impact (4,164 DE genes) followed by menthol treatment (1,114 DE genes) and then the additive combinations of *Vibrio* and menthol (472 DE genes). KEGG enrichment analyses identified 11 pathways - involved in immunity (5), transport and catabolism (4) and cell growth and death (2) - that were enriched due to both *Vibrio* and/or menthol exposure. Immune pathways showing strongest differential expression included complement, coagulation, NOD, and Toll for *Vibrio* exposure and coagulation and apoptosis for menthol.
+
+\newpage
+### Introduction
+
+Cnidarians represent one of the earliest animal groups [@steele_genomic_2011] and thus are ideal systems to study the origins of genetic processes like innate immunity [@bosch_cnidarian-microbe_2013; @lehnert_developing_2012; @hemmrich_evolution_2007]. Initial characterizations of cnidarian immune genes indicated that they possess key components of the major innate immune pathways including Toll/TLR pathway, complement C3, membrane attack complex/perforin domains, and other components of innate immunity once thought to have evolved much later [@miller_innate_2007; @nyholm_knowing_2012; @shinzato_using_2011; @putnam_sea_2007], yet, it was not known whether cnidarians used these immune pathways to mount a response against pathogens. A number of groups have since used RNA-Seq data to produce some of the first profiles of anthozoan innate immunity [@van_der_burg_insights_2016; @fuess_life_2017; @weiss_acute_2013; @poole_tir-domain-containing_2014; @libro_rna-seq_2013; @libro_genetic_2016; @vidal-dupiol_physiological_2011]. To date, at least nine studies have profiled the immune response of corals and their anthozoan relatives, and the data suggest that the immune response varies across anthozoans and/or immune exposures. For example, @weiss_acute_2013 studied the response of the reef coral *Acropora millepora* to the bacterial cell wall derivative muramyl dipeptide (MDP) and observed the up-regulation of GTPases of immunity associated proteins (GiMAPs), which are primarily associated with immunity in vertebrates [@wang_ian/gimaps_2009] and plants [@liu_computational_2008]. @vidal-dupiol_physiological_2011 compared the transcriptomic responses of the reef coral *Pocillopora damicornis* to thermal stress and *Vibrio coralliilyticus* infection and observed that immune pathways - including Toll/TLR, complement, prophenoloxidase, and the leukotriene cascade pathways – were up-regulated due to exposure to *Vibrio* exposure. @libro_rna-seq_2013 compared the immune response of healthy and White Band Disease (WBD) infected *Acropora cervicornis* coral using RNA-Seq and found that C-type lectins, ROS production, arachidonic acid metabolism, and allene oxide production were strongly up-regulated in diseased corals [@libro_rna-seq_2013]. Up-regulation of C-type lectins and ROS production are hallmarks of phagocytosis, and the metabolism of arachidonic acid via the allene oxide pathway has been linked to eicosanoid synthesis in wounded corals [@helike_lohelaid_up-regulated_2014]. Interestingly, @libro_rna-seq_2013 did not identify strong up-regulation of genes associated with the classic innate immune pathways such as Toll-like receptor pathway or Prophenoloxidase pathway.
+
+Reef-building corals and other anthozoans like the symbiotic anemone *Exaiptasia* (hereafter referred to as *Aiptasia*) are also well known for their symbiotic relationship with the dinoflagellate *Symbiodinium* (also called zooxanthellae). This symbiosis presents a challenge with regard to the immune system because both pathogens and symbionts can elicit an allorecognition response, with the difference being that pathogens are typically eliminated, while symbionts are allowed to coexist within vacuoles in the endodermis of host cells [@wakefield_revised_2000; @kazandjian_isolation_2008] providing the anthozoan host up to 95% of its energy as translocated polysaccharides [@falkowski_light_1984]. Symbiosis requires clear communication between the host and symbiont. During the establishment of symbiosis, the anthozoan host must be able to recognize symbionts, engulf them in phagosomes, and shield these phagosomes from destruction [@davy_cell_2012]. This suggests a clear link between symbioses and immunity wherein symbionts evade the immune response. Arrest of phagosomal maturation by Rab GTPases [@davy_cell_2012] and suppression of immune responses by transforming growth factor beta (TGF$\beta$) [@detournay_regulation_2012] have been identified as potential mechanisms by which symbionts are shielded from destruction by the immune system. Once symbiosis is established, the host must regulate the growth of the symbionts and remove dead or dying symbionts [@davy_cell_2012]. Regulation of nutrients has been identified as one mechanism by which the host can prevent overgrowth of the dinoflagellates [@davy_cell_2012].
+
+For symbiotic corals and anemones, we know less about how the symbiosis is maintained and more about the breakdowns in the symbiosis – known as bleaching – when the symbionts are degraded or expelled by the coral host due to factors like thermal stress [@fitt_coral_2001], UV exposure [@gleason_ultraviolet_1993], and disease [@libro_rna-seq_2013]. In addition to these naturally occurring stressors, chemical agents have been identified including menthol [@wang_physiological_2012] and photosynthesis inhibitors [@jones_testing_2004] that result in bleaching. Several mechanisms have been identified that result in the degradation and expulsion of the symbionts, including apoptosis, necrosis, and symbiont digestion via autophagy (symbiophagy) [@dani_thermal_2016], and the mechanisms vary depending on the type of stress. Apoptosis and necrosis predominate in heat-stress bleaching, while symbiophagy predominates in menthol bleaching [@dani_thermal_2016; @wang_physiological_2012]. Arrest of phagosomal maturation is required for the establishment of symbiosis, and @dani_thermal_2016 suggest that a re-engagement of phagosomal maturation is involved in the breakdown.
+
+The symbiotic anemone *Aiptasia* has become a model for studying symbiosis and immunity in symbiotic anthozoans because (i) it is a hardy animal that can be made aposymbiotic experimentally by exposing it to cold and heat stress [@lehnert_extensive_2014], as well as by treating it with compounds like menthol [@matthews_menthol-induced_2016], (ii) it can be propagated clonally [@sunagawa_generation_2009], and (iii) a well-annotated genome for *Aiptasia* now exists [@baumgarten_genome_2015]. Limited gene expression data also exist for *Aiptasia* comparing aposymbiotic and symbiotic anemones [@lehnert_extensive_2014], *Aiptasia* exposed to pathogens [@poole_role_2016], and *Aiptasia* colonized by heterologous symbionts [@matthews_optimal_2017]. @lehnert_extensive_2014 used RNA-Seq to compare symbiotic and aposymbiotic anemones and identified 900 differentially expressed genes involved in metabolite transport, lipid metabolism, and amino acid metabolism. @poole_role_2016 used qPCR to compare complement activity in response to colonization with *Symbiodinium* and the response to pathogen exposure (*Serratia marcescens*). Within the complement pathway B-Factor 1 and MASP were up-regulated and B-Factor 2b down-regulated in response to both pathogen exposure and symbiont colonization. @matthews_optimal_2017 used RNA-Seq to profile immune and nutrient exchange activity in response to colonization with *Symbiodinium trenchii* versus its normal symbiont, *Symbiodinium minutum*. The expression pattern after colonization with the heterologous *S. trenchii* was intermediate between the aposymbiotic state and the normal (*S. minutum*) symbiotic state, with up-regulation of innate immune pathways in response to heterologous colonization.
+
+In this study, we explore the genetic links between the anthozoan-algal symbioses and immunity in a two-factor RNA-Seq experiment using menthol-bleached *Aiptasia* exposed to the bacterial pathogen *Vibrio coralliilyticus*. Menthol-bleaching was used to compare symbiotic (untreated) versus aposymbiotic (menthol treated) anemones where the hypothesized mechanism of menthol bleaching is thought to be the activation of autophagic digestion of *Symbiodinium* cells (symbiophagy) as part of host innate immunity [@dani_thermal_2016]. The bacterial pathogen *Vibrio coralliilyticus* was used to initiate the immune response of *Aiptasia*. The two-factor design comparing *Vibrio* and menthol exposure as factors allowed us to identify gene expression patterns that were due to *Vibrio* and/or menthol exposure as well as any interactions between the exposures.
+
+### Methods
+
+Wild *Aiptasia pallida* were obtained from Carolina Biological Supply. These anemones collected off the coast of North Carolina are the source population from which the widely-used cc7 clonal population was developed [@sunagawa_generation_2009]. Anemones were maintained in 6-well culture plates and held under 24-watt t5 fluorescent lights for 12-hour light cycle. To avoid any bias based on lighting intensity or other positional effects, the wells of the plates were randomly assigned to six groups. Thirty-six anemones were divided into menthol-treatment and control. The menthol-treatment and control groups were then further subdivided with 12 anemones being sacrificed to estimate *Symbiodinium* densities due to menthol exposure leaving 12 anemones for *Vibrio* treatment. At the end of the menthol and *Vibrio* exposures, we produced RNA-Seq data for six replicate anemones for each of the four treatment levels: *Vibrio* treated/no menthol (symbiotic), no *Vibrio*/no menthol (symbiotic), *Vibrio* treated/menthol treated (aposymbiotic), and no *Vibrio*/menthol treated (aposymbiotic).
+
+After plating and group assignment anemones were maintained in the wells for a one-week acclimation phase. They were exposed to a 12-hour day/night cycle with a light intensity of 70 $\mu$mol quanta m^-2^ s^-1^. To avoid contamination of the RNA with any partially digested food the anemones were not fed during the acclimation phase. Aposymbiotic anemones were produced by exposure to 0.58 mM menthol/ASW using a modified version of the protocol outlined by @wang_physiological_2012. The menthol exposure was on a 72-hour cycle, with a 24-hour menthol exposure followed by a 48-hour resting period in 0.2 $\mu$m filtered natural seawater (FNSW). A total of 36 anemones were put through the menthol treatment cycle. During the menthol treatment cycle, 18 anemones had water replaced with 0.58 mM menthol/FNSW, and 18 had water replaced with fresh FNSW. The degree of menthol bleaching was measured by homogenizing anemones with BioMasher mortar and pestle sets in 1 mL FNSW, counting *Symbiodinium* cells manually with a hemocytometer from three replicate cells, and normalizing symbiont densities by animal wet weight for six controls and five menthol-treated anemones. Menthol-bleached anemones had a 22.5-fold reduction in *Symbiodinium* cells/mg wet weight (df=1, f=62.94, p=2.37e-05), with a control mean of 24,901 cells/mg (+- 7,000), and bleached mean of 1,105 cells/mg (+- 297).
+
+After the menthol treatment and resting period was complete, 12 anemones were then exposed to live *Vibrio* at a concentration of 10^8^ CFU ml^-1^ in 0.2 $\mu$m filtered natural seawater (FNSW) using *Vibrio coralliilyticus* strain BAA-450™ from ATCC^®^ [@ben-haim_vibrio_2003], and 12 controls were exposed to FNSW. The *Vibrio* inoculate was produced by centrifuging marine broth cultures, drawing off the broth, and re-suspending the pellet in FNSW. The anemones were exposed to either *Vibrio* or FNSW for 24 hours, then immediately homogenized in Tri-Reagent for downstream extraction of total RNA.
+
+After the menthol treatment and *Vibrio* exposures were complete, the anemones were homogenized using BioMasher mortar and pestle sets for total RNA extraction. Each anemone was first homogenized in 900 $\mu$L Tri-Reagent, then the 900 $\mu$L was divided into three separate tubes to which an additional 600 $\mu$L Tri-Reagent was added to ensure sufficient Tri-Reagent volume to lyse the cells completely. Total RNA was isolated using the Tri-Reagent manufacturer’s protocol. Total RNA was quantified on an Agilent BioAnalyzer to obtain concentrations and RIN scores. For each of the 24 samples, the RNA isolate with the highest RIN score (mean score 6.88) was selected to proceed to mRNA isolation and Illumina RNA-Seq library preparation. mRNA was isolated using the NEBNext® Poly(A) mRNA Magnetic Isolation Module and Illumina libraries were produced using the NEBNext® Ultra™ Directional RNA Library Prep Kit for Illumina®. Multiplexed 100 bp paired-end libraries were sequenced on an Illumina HiSeq 2500 platform at the FAS Center for System Biology at Harvard University. The reads were adapter and quality-trimmed using Trimmomatic version 0.36 [@bolger_trimmomatic:_2014] using a 4-base sliding-window quality cutoff of 30 (Phred+33) and the TruSeq3 adapter sequence file (TruSeq3-PE.fa). Transcript counts were quantified against the predicted coding sequences using Salmon [@patro_salmon:_2017] and the transcript counts were imported into DESeq2 [@love_moderated_2014] using tximport [@soneson_differential_2015]. We performed two-way ANOVA on the counts of trimmed and aligned reads and found no significant differences based on *Vibrio* (F = 1.022, p=0.324) or menthol exposure (F = 0.571, p=0.459).
+
+To facilitate KEGG [@kanehisa_kegg_2016] pathway analysis, the transcripts were mapped from *Aiptasia* predicted protein IDs to KEGG ortholog IDs. Predicted coding sequences were extracted from the *Aiptasia* genome annotation file using the gffread utility from the Cufflinks [@trapnell_differential_2012] package yielding 26,042 sequences. The FASTA file produced by gffread was aligned to Swiss-Prot [@the_uniprot_consortium_uniprot:_2017] using blastx [@camacho_blast]. Swiss-Prot hits were filtered using an e-value cutoff of 1e-10 and a minimum query coverage of 50%. Where blastx hits mapped to multiple KEGG orthologs, the ortholog with the query coverage closest to 100% was selected. For multiple hits with identical coverage, the lowest e-value was chosen. This same process was then applied in the reverse direction to eliminate duplicate *Aiptasia* to KEGG ortholog mappings. The filtering and mapping were accomplished with custom Perl and R scripts, yielding 4,807 one-to-one *Aiptasia* to KEGG ortholog mappings. This mapping table is available under supplemental data as aipAnnot.csv.
+
+PERMANOVA and MDS analyses were used to identify transcriptome-wide differences in gene expression due to menthol or *Vibrio* exposure. Hellinger-transformed DESeq2-normalized counts were analyzed using PERMANOVA to identify transcriptome-wide differences in expression patterns using the R package Vegan [@oksanen_vegan:_2018] and MDS was used to visualize transcriptome-wide differences between groups [@oksanen_vegan:_2018]. A two-factor negative binomial GLM implemented in DESeq2 [@love_moderated_2014] was used to identify differentially expressed (DE) genes that differed due to *Vibrio* and menthol exposure as well as the interaction. The R package ESGEA [@alhamdoosh_easy_2017] was used to identify KEGG pathways that showed significant enrichment due to *Vibrio* or menthol exposure, and the R package GOseq [@young_gene_2010] was used to identify pathways overrepresented in DE genes.
+
+### Results
+
+RNA-Seq data were produced for 24 anemones with 6 replicates each for the four treatment groups: 1) *Vibrio* treated /no menthol (symbiotic), 2) no *Vibrio*/no menthol (symbiotic), 3) *Vibrio* treated/menthol treated (aposymbiotic), and 4) no *Vibrio*/menthol treated (aposymbiotic). Menthol treatment resulted in a significant 22-fold reduction in *Symbiodinium* densities (ANOVA df=1, F=18.13, p=0.002); menthol-treated (aposymbiotic) anemones appeared completely white in color and had *Symbiodinium* densities averaging 1,105 cells/mg (+- 297) compared to the untreated symbiotic anemones, which averaged 24,901 cells/mg (+- 7,000). None of the anemones died after *Vibrio* exposure, and there were no visible differences in appearance or behavior of the anemones between the treatment groups. The number of mapped RNA seq reads per anemone averaged 7,681,952 read pairs (+- 671,717 SE) with no significant mapping differences due to either the menthol or *Vibrio* treatment (2-way ANOVA, supplementary Table S1).
+
+### Multivariate Analyses
+
+Multivariate PERMANOVA analyses identified strong and significant differences in transcriptome-wide gene expression patterns (Table 1) due to *Vibrio* (r^2^ = 0.199, p = 0.001) and menthol exposure (r^2^ = 0.098, p = 0.007), but not the *Vibrio*-menthol interaction. *Vibrio* explained 19.9% of the variation and menthol explained 9.8% of the variation. Multidimensional scaling (MDS) plots (Fig. 1) show these strong differences among treatments with *Vibrio* exposure separated primarily on axis 1 and menthol exposure separated along axis 2.
+
+### Univariate Analyses
+
+Univariate, negative binomial GLMs in DESeq2 [@love_moderated_2014] were used to identify genes that were differentially expressed due to *Vibrio* exposure, menthol exposure, and/or the interaction (Fig. 2). In all, 4,164 genes were significantly DE for *Vibrio* exposure, 1,114 genes were DE for menthol exposure, and 66 genes were DE for the *Vibrio*-menthol interaction. When you consider only genes with strong protein annotations (Blast 50% query coverage, e-value 1e-10, best 1:1 ortholog match), there were 1,338 DE annotated genes for *Vibrio* exposure, 462 DE annotated genes for menthol exposure, and 11 DE annotated genes for the *Vibrio*-menthol interaction.
+
+The UpSet plot (Fig. 2) shows more genes up-regulated than down-regulated for both *Vibrio* and menthol. *Vibrio* alone showed the strongest effect, with more DE genes up-regulated (V+ = 2,155) than down-regulated (V- = 1,552), followed by menthol alone, with slightly more down-regulated (M- = 353) than up-regulated (M+ = 322) DE genes. The third major grouping consisted of 230 genes that were up-regulated for both *Vibrio* and menthol (V+M+), and 142 genes down-regulated for both *Vibrio* and menthol (V-M-). Thirty genes were up-regulated for *Vibrio*, but down-regulated for menthol. There were very few interactions, with all remaining groupings consisting of 21 or fewer genes.
+
+To facilitate the analysis of the large number of differentially expressed
+genes, we performed KEGG pathway enrichment analysis using ESGEA
+[@alhamdoosh_easy_2017]. We categorized pathways by KEGG pathway class and as
+significantly enriched for *Vibrio* only (V), menthol only (M) or both (VM). To
+further narrow the focus to immune-related KEGG pathway classes, we focused on
+immune system, transport and catabolism, and cell growth and death pathways.
+Within these pathway classes, we identified 11 pathways that were significantly
+enriched for *Vibrio* and/or menthol exposure (Table 2). Seven pathways
+were enriched for both *Vibrio* and menthol (VM), four pathways were enriched
+for *Vibrio* only (V) and no pathways were enriched for menthol only.
+
+Differential gene expression patterns shown in Table 2 for all eleven enriched pathways indicate the numbers of annotated genes that are DE for *Vibrio* only [up (V+) or down (V-)], Menthol only [M+ or M-], or Both [V+M+, V-M-]. While all 11 pathways have more than 5 DE genes overall, only complement pathway had a significant over-representation of DE genes and only for *Vibrio* (adj-p = 0.004); the adjusted p-value for menthol was nearly significant with an adj-p equal to 0.153.
+
+When we compare expression patterns of DE genes that are highly differentially expressed (|log~2~ fold change| \> 1) across all 11 pathways, 42 genes were highly expressed (Table 3, Table 4, Table 5). For the immune pathways (Table 3), complement and coagulation cascade pathway had the most highly expressed DE genes with 10 DE genes; four genes are part of the coagulation cascade and the remaining six genes are part of the complement cascade. Out of the four coagulation genes, two were highly up-regulated for both *Vibrio* and menthol (TFPI1, VWF), A2MG was up-regulated for *Vibrio* and near (|log~2~ fold change| \> 1) for menthol, while F13B was up-regulated for *Vibrio* only. Out of the six complement genes, five genes within the complement alternative pathway were up-regulated for *Vibrio* only (MCP, DAF, CFAB, CO3, CFAH). The remaining complement gene PAI2 was down-regulated for both *Vibrio* and menthol and is involved in negative regulation of apoptosis, fibrinolysis, and wound healing.
+
+NOD-like receptor pathway, which includes toll-like receptor pathway, had 6 highly expressed DE genes all of which were DE for *Vibrio* only [3 up-regulated and 3 down-regulated]. B2CL1, TRAF3, and MY88A were up-regulated, while TRAF2, RIPK2, and CASR were down-regulated due to *Vibrio* exposure. MY88A [@deguine_myd88:_2014-1], TRAF3 [@hacker_expanding_2011], and RIPK2 [@nachbur_ripk2_2015] activation lead to NF-kappa-$\beta$ activation, cytokine secretion, and the inflammatory response while B2CL1 inhibits caspases and suppresses apoptosis [@youle_bcl-2_2008]. TRAF2 Regulates activation of NF-kappa-$\beta$ [@lin_crucial_2011] and JNK [@brnjic_chemical_2010] and CASR [@chakravarti_signaling_2012] regulate apoptosis and calcium homeostasis.
+
+Chemokine signaling pathway had 3 highly expressed DE genes for *Vibrio* only [1 up; 2 down]. STAT1 was up-regulated, while CXCR4 and GBB4 were down-regulated. Signal transducer and transcription activator STAT1 mediates cellular responses to interferons and cytokines [@cheon_functions_2011]. CXCR4 transduces a chemokine signal by increasing intracellular calcium ion levels and enhancing MAPK1/MAPK3 activation [@vlahakis_g_2002]. GBB4 is a G protein involved in modulating transmembrane signaling systems [@block_gnb_2016].
+
+Antigen processing and presentation had 2 highly expressed DE genes; PSME2 was up for *Vibrio* only and RFXK down for menthol only. PSME2 is a proteasome activator involved in antigen processing [@sijts_role_2002]. RFXK activates transcription from class II MHC promoters [@forsberg_caspase-2-rfxank_2018].
+
+For the transport and catabolism pathways (Table 4), the endocytosis pathway had 7 highly expressed DE genes. Three genes were up for *Vibrio* only (HRS, HSE1, CLH), 3 genes were down for *Vibrio* only (CXCR4, VPS4, PLD2), and one gene was down for menthol only (JUNO). Peroxisome pathway had 7 highly expressed DE genes. One gene was up for both (PAOX), 3 genes were down for *Vibrio* only (SOX, LCFB, DHRS4), one gene was down for both (GNPAT), one gene was up for menthol only (EASC) and one gene was down for menthol only (BAAT). Peroxisomes are involved in resolution of bacterial infection through innate immune signaling [@di_cara_peroxisome-mediated_2017]. Lysosome pathway had 5 highly expressed DE genes. Two genes were up for *Vibrio* only (AP3D, CLH), one gene was down for *Vibrio* only (GALNS), one gene was up for menthol only (PAG15), and one gene was down for menthol only (BGLR).
+
+For cell growth and death (Table 5), apoptosis pathway had 7 highly expressed DE genes. Three genes - B2CL1 and two Caspases (CASP7, CASP9) - were up for *Vibrio* only, two genes were down for *Vibrio* only (TRAF2, TBA), one was up for menthol (P53) and one was down for menthol only (BIRC5).
+
+### Discussion
+
+Multivariate and univariate analyses of *Aiptasia* gene expression demonstrated that exposure to live *Vibrio coralliilyticus* and menthol had strong and significant impacts on transcriptome-wide gene expression that are independent or additive in their effects, but not interactive. *Vibrio* exposure had the strongest impact (4,164 DE genes) followed by menthol treatment (1,114 DE genes) and then the additive combinations of *Vibrio* and menthol (472 DE genes). KEGG enrichment analyses identified 11 pathways - involved in immunity (5), transport and catabolism (4) and cell growth and death (2) - that were enriched due to *Vibrio* and/or menthol exposure. Seven pathways were enriched for both *Vibrio* and menthol (complement and coagulation cascades, chemokine signaling, endocytosis, lysosome, peroxisome, apoptosis, P53 signaling), and four pathways were enriched for *Vibrio* alone (antigen processing and presentation, leukocyte transendothelial migration, NOD-like receptor signaling, phagosome). Yet, over-representation of DE genes was only significant for *Vibrio* exposure for complement and coagulation cascade pathway. Pathway level responses in gene expression are discussed further below.
+
+### Immune System Response
+
+Amongst the immune system pathways, there was strong evidence that the complement and coagulation cascade was responding to both *Vibrio* and menthol exposure, whereas NOD/TLR pathway, chemokine, and antigen processing were initiated primarily by *Vibrio* exposure. The stimulation of complement and coagulation cascade pathway and NOD/TLR pathway indicates that bacterial immune challenge by *Vibrio* involves two of the three primary innate immune pathways in invertebrates; we did not find significant evidence for stimulation of the prophenoloxidase (PPO) activating system (i.e. melanization), which has been shown to be up-regulated in some hard and soft coral immune responses [@palmer_towards_2012].
+
+### Complement and Coagulation Cascade
+
+Overall, patterns of gene expression in the complement and coagulation cascade indicate that coagulation is initiated by *Vibrio* and menthol exposure, whereas the complement alternative pathway is initiated primarily by *Vibrio* exposure. Complement and coagulation cascade pathway had 10 highly expressed DE genes; four DE genes in the coagulation cascade and six DE genes in the complement cascade. Two out of the four coagulation genes were up-regulated due to *Vibrio* and menthol exposure [(von Willebrand factor (VWF),  tissue factor pathway inhibitor (TFPL1)]. Alpha-2-macroglobulin (A2MG) was up-regulated for *Vibrio* and near (|log~2~ fold change| \> 1) for menthol, while coagulation factor XIII B polypeptide (F13B) was up-regulated for *Vibrio* exposure only. Five out of the six DE genes in the complement pathway were up-regulated for *Vibrio* only (MCP, DAF, CFAB, CO3, CFAH) while PAI2 was down-regulated for both *Vibrio* and menthol.
+
+The coagulation pathway response represents a balance between procoagulant factors that close wounds and prevent fluid loss, and anticoagulant factors that prevent coagulation in surrounding healthy tissue and dissolve clots after healing has occurred [@palta_overview_2014]. The release of transglutaminase agglutinates proteins into a gel to entrap pathogens and to seal wounds following injury [@cerenius_crustacean_2010], while plasmin and its regulators are involved in clot dissolution [@hoover-plow_does_2010]. Complement alternative pathway opsonizes pathogens through nonspecific covalent bonding of C3b, relying on complement regulators like DAF, MCP, and CFAH to identify and protect healthy host cells [@thurman_dynamic_2011]. Opsonization by C3b initiates removal by phagocytosis [@cerenius_crustacean_2010; @ferreira_complement_2010; @schmidt_protection_2016].
+
+Out of the four highly expressed DE coagulation genes that differed due to *Vibrio* and menthol exposure, three genes (VFW, A2MG, TFPL1) have previously been associated with immune challenge in anemones [@rodriguez-lanetty_transcriptome_2006; @stewart_transcriptomic_2017] and corals [@oren_assembled_2010; @libro_rna-seq_2013; @libro_genetic_2016]. Von Willebrand factors (VWF) have also been observed to be up-regulated in symbiotic *Aiptasia* [@rodriguez-lanetty_transcriptome_2006]. To our knowledge, our data are the first to associate the down-regulation of plasminogen activator inhibitor 2 with either immune challenge or symbioses.
+
+Von Willebrand factor (VWF) is involved in cell adhesion and collagen binding and in vertebrates facilitates platelet adhesion to damaged blood vessels [@ruggeri_role_2007]. VWF has been associated with allogeneic rejection, pathogen exposure, and symbiotic state in cnidarians. @oren_assembled_2010 observed up-regulation of VWF during allogeneic rejection in the coral *Stylophora pistillata*, @libro_rna-seq_2013 observed up-regulation of VWF in response to White Band Disease infection in the coral *Acropora cervicornis*, and @rodriguez-lanetty_transcriptome_2006 observed up-regulation of VWF in symbiotic versus aposymbiotic forms of the anemone *Anthopleura elegantissima.* Our data indicate that VWF is up-regulated due to menthol induced bleaching and thus the difference between our data and @rodriguez-lanetty_transcriptome_2006 may reflect differences in VWF expression between the initial breakdown in symbioses versus a stable aposymbiotic state. Overall, our data coupled with published data indicate that up-regulation of VWF may be a hallmark of anthozoan immunity, allorecognition, and breakdown of symbioses.
+
+Alpha-2-macroglobulin (A2MG) binds peptides including a wide range of proteinases [@borth_alpha_1992]. The ability to bind the serine protease thrombin gives A2MG anticoagulant properties [@mitchell_alpha-2-macroglobulin_1991], while the ability to inhibit protein C and protein S gives it procoagulant properties [@cvirn_alpha_2002]. Many pathogen virulence factors act as proteases, and A2MG's ability to inhibit proteases protects the host from these virulence factors  [@armstrong_alpha2-macroglobulin:_1999]. A2MG has been associated with pathogen exposure in corals [@libro_rna-seq_2013] and wound healing in anemones [@stewart_transcriptomic_2017], but had not been linked to symbioses. @libro_rna-seq_2013 observed up-regulation of A2MG in response to White Band Disease infection in *Acropora cervicornis* and @stewart_transcriptomic_2017 identified that A2MG was among the highest up-regulated genes in response to wound healing in the anemone *Calliactis polypus*. Our results demonstrate it is also upregulated during the breakdown of symbioses as well as during *Vibrio* pathogen exposure.
+
+Tissue factor pathway inhibitor (TFPI) inhibits coagulation by inhibition of factor Xa and factor VIIa/tissue factor [@broze_tissue_2012], and has been associated with coral immunity [@libro_genetic_2016] and oxidative stress in anemones [@richier_response_2008], but not the breakdown of symbioses. @libro_rna-seq_2013 observed up-regulation of TFPI in response to White Band Disease infection in *Acropora cervicornis*, and @richier_response_2008 observed down-regulation of TFPI in response to UV and thermal stress.
+
+Plasminogen activator inhibitor 2 (PAI2) is a serine protease inhibitor associated with inhibition of fibrinolysis [@stump_biochemical_1986] and negative regulation of apoptosis [@dickinson_plasminogen_1995]. PAI2 inhibits the fibrinolytic urokinase plasminogen activator (uPA) [@cochran_cd-loop_2009; @stump_biochemical_1986]. Down-regulation of PAI2 for both *Vibrio* and menthol exposure suggests a net anticoagulant effect. Serine protease inhibitors have not been associated with anthozoan immunity or symbioses, but both up and down-regulation of serine protease inhibitors have been reported in other invertebrates like the silkworm *Bombyx mori* in response to bacterial challenge [@zhao_genome-wide_2012].
+
+Overall, the patterns of DE in the three coagulation genes (A2MG, TFPI, PAI2) suggest that coagulation is inhibited. While the coagulation pathway is typically involved in wound healing, another possible explanation for the differential expression of coagulation genes due to menthol exposure is the breakdown of coagulants within the symbiosome. @kazandjian_isolation_2008 observed high levels of coagulants in isolated symbiosomes of the coral *Zoanthus robustus*. This observation was secondary to their study, but the high levels of coagulants within the symbiosomes prevented the use of Percoll gradients to purify the symbiosomes. Our data suggest menthol exposure may initiate the breakdown of the symbiosome, and inhibition of coagulation may counteract the release of coagulants from within the ruptured symbiosome.
+
+Within the complement cascade, the six highly expressed DE genes that were up-regulated for *Vibrio* (C3, factor B, coagulation factor XII B polypeptide, membrane cofactor protein, decay accelerating factor, factor H) indicate that complement is key to responding to bacterial pathogen infection. Complement C3, plays a central role in both the classical and alternative complement pathways, and is activated by C3 convertase and then opsonizes pathogens leading to phagocytosis [@reid_proteolytic_1981]. Up-regulation of C3 has been observed in the coral *Acropora millepora* treated with bacterium *Alteromonas* [@brown_transcriptional_2013] and in WBD-infected *Acropora cervicornis* [@libro_genetic_2016].
+
+Complement factor B (CFAB) is part of the alternative pathway and is involved in the generation of C3 convertase and downstream cleavage of C3 into its active components [@xu_structural_2001]. @poole_role_2016 identified two variants of Factor B in *Aiptasia*, one of which was up-regulated in response to both onset of symbiosis and treatment with *Serratia marcescens*. Up-regulation of coagulation factor XII B chain (F13B), is associated with blood coagulation and hemostasis in vertebrates [@ivanov_proteolytic_2017], and has also been observed in diseased *Acropora cervicornis* [@libro_genetic_2014].
+
+In the complement pathway, the classical and lectin pathways require specific recognition molecules for initiation, but in the alternative pathway, C3b is deposited on all cells (host as well as pathogenic) exposed to activated complement [@ferreira_complement_2010]. Three remaining highly expressed DE genes within complement (membrane cofactor protein, complement decay-accelerating factor, factor H) are all involved in protecting host tissues from attack by the less specific alternative complement pathway [@elvington_evolution_2016; @ferreira_complement_2010]. Up-regulation of Membrane cofactor protein (MCP/cd46), complement decay-accelerating factor (DAF/cd55), and Component factor H in *Aiptasia* would limit C3b deposition on healthy *Aiptasia* cells [@elvington_evolution_2016; @ferreira_complement_2010]. Neither DAF, MCP, or CFAH have previously been associated with anthozoan immunity.
+
+### NOD/TLR pathway
+
+NOD/Toll-like receptor pathway had six highly DE genes [3 up and 3 down] due to *Vibrio* exposure. Myeloid differentiation primary response protein (MyD88), TNF receptor-associated factor 3 (TRAF3) and Bcl-2-like 1 apoptosis regulator Bcl-X (Bcl-2) were up-regulated, while TNF receptor-associated factor 2 (TRAF2), receptor-interacting serine/threonine-protein kinase 2 (RIPK2), and calcium-sensing receptor (CASR) were down-regulated. MyD88, TRAF3, and RIPK2 are key regulators of the NOD and TLR pathways that lead to NF-kappa-$\beta$ activation, cytokine secretion and the inflammatory response [@deguine_myd88:_2014-1; @hacker_expanding_2011; @nachbur_ripk2_2015], while Bcl-2 inhibits caspases and suppresses apoptosis [@youle_bcl-2_2008]. TRAF2 regulates activation of NF-kappa-$\beta$ [@lin_crucial_2011] and JNK [@brnjic_chemical_2010] and CASR [@chakravarti_signaling_2012] regulate calcium homeostasis.
+
+Out of the six DE genes in the NOD/Toll-like receptor pathway, only MyD88 has previously been observed to be DE in cnidarians due to immune exposure. @libro_rna-seq_2013 observed up-regulation of MyD88 in WBD-infected *Acropora cervicornis*. In humans [@wang_micrococci_2001], mouse, [@deguine_myd88:_2014], and fly [@horng_drosophila_2001], stimulation of toll-like receptors (TLRs) causes MyD88 to associate with the intracellular domain of the TLR leading to downstream signaling of NF-kappa-$\beta$ via IRAK and TRAF and production of pro-inflammatory cytokines [@akira_pathogen_2006]. TLR activation of MyD88 has been demonstrated in the anemone *Nematostella vectensis* in a reporter gene assay where *Nematostella* TIR domain of TLR activated human MyD88. Our results indicate that MyD88 interacts with TRAF3 but not IRAK, which is supported by a MyD88 knockdown study by @franzenburg_myd88-deficient_2012 in the hydrozoan *Hydra vulgaris*, which resulted in the down-regulation of TRAF3 but not IRAK.
+
+The expression patterns of Bcl-2, RIPK2, and CASR suggest that they are acting to prevent apoptosis in *Aiptasia* exposed to *Vibrio*. The B-cell lymphoma 2 (Bcl-2) family of apoptosis-regulating proteins includes both pro and anti-apoptotic members. The *Aiptasia* Bcl-2 homolog up-regulated in this study was the anti-apoptotic Bcl-W. @dunn_highly_2006 identified Bcl-2 family members including Bcl-W in *Aiptasia* cDNA. @ainsworth_situ_2015 identified up-regulation of the pro-apoptotic Bcl-2 family member Bak in *Acropora hyacinthus* tissues exhibiting white syndrome and @pernice_regulation_2011 proposed that up-regulation of Bcl-2 is a protective response to heat-stress-induced apoptotic activity in *Acropora millepora*. Down-regulation of RIPK2 and CASR also suggests an anti-apoptotic role in *Aiptasia* exposed to *Vibrio*. RIPK2 is a protein kinase that activates NF-kappa-$\beta$ and induces cell death [@mccarthy_rip2_1998]. CASR is involved in the JNK cascade and apoptotic process, and up-regulation of CASR leading to apoptosis has been reported in rat myocytes exposed to LPS. To our knowledge, we are the first to report differential expression of RIPK2 and CASR in cnidarians.
+
+TRAF2 transduces TNF signaling to activate NF-kappa B, activate JNK, and suppress apoptosis [@xia_sphingosine_2011]. TRAF2 has not been associated with cnidarian immunity, but has been shown to be DE due to injury in *Hydra* [@pernice_regulation_2011; @wenger_injury-induced_2014]. Down-regulation of TRAF2 suggests that it is working counter to Bcl-2, RIPK2, and CASR to promote apoptosis in *Aiptasia* exposed to *Vibrio*
+
+Even though *Aiptasia* shows strong evidence for TLR pathway activation, there were no *Aiptasia* TLRs meeting our annotation criteria (best hit, e-value \< 1e-10, coverage \> 50%). Two *Aiptasia* genes (KXJ18603.1, KXJ08560.1) annotated as a relaxin receptor 2 (RXFP2) and outer membrane protein OprM (OPRM) were up-regulated for *Vibrio* and had had blast hits for a TLR with an e-value \< 1e-10 and coverage greater than 50%. While it is possible that these two genes represent TLRs, more data would be needed to confirm their putative functions. Toll-like receptors (TLRs) are transmembrane proteins consisting of an extracellular leucine-rich repeat region (LRR) involved in pathogen recognition, and an intracellular toll-interleukin receptor (TIR) which initiates downstream activation of NF-kappa-$\beta$ via MyD88 [@brennan_sea_2017]. A single TLR has been identified in the model anemone *Nematostella Vectensis*, and its activation and downstream signaling via NF-kappa-$\beta$ has been demonstrated in response to *Vibrio coralliilyticus* [@brennan_sea_2017]. We performed a Pfam domain search and found a number of LRR-containing and TIR-containing proteins up-regulated for *Vibrio*, but none of these transcripts contained both domains (as expected of TLRs; this is consistent with the findings of  @baumgarten_genome_2015 who did not find any proteins containing both domains in the *Aiptasia* genome). In contrast to TLRs, nucleotide-binding and oligomerization domain (NOD)-like receptors (NLRs) are present in the *Aiptasia* genome [@baumgarten_genome_2015], but as with TLRs, we observed up-regulation of genes in the NOD pathway, but not up-regulation of NLRs. NOD-like receptors are intracellular pattern-recognition proteins that when activated lead to activation of NF-κB and MAPK, and production of inflammatory caspases [@franchi_function_2009].
+
+### Chemokine and Antigen Processing
+
+Chemokine and antigen processing pathways were also activated by *Vibrio* exposure. Chemokine pathway had three highly DE genes - signal transducer and activator of transcription 1-alpha/beta (STAT1) was up-regulated while C-X-C chemokine receptor type 4 (CXCR4), and guanine nucleotide-binding protein subunit beta-4 (GBB4) were down-regulated. STAT1 mediates cellular responses to interferons (IFNs), cytokines and other growth factors [@ramana_complex_2000], and up-regulation of STAT in response to bacterial exposure has been reported in a number of invertebrates including *Anopheles gambiae* (mosquito) [@barillas-mury_anopheles_1999], *Drosophila* [@buchon_drosophila_2009], and *Fenneropenaeus chinensis* (Chinese white shrimp) [@sun_molecular_2011]. @sinkovics_cnidarian_2015 proposed a Cnidarian origin of STAT based on genomic studies on *Nematostella vectensis*, but its role in immunity had not been confirmed by expression analysis.
+
+CXCR4 is an LPS binding protein [@triantafilou_cd14-independent_2001], extracellular ubiquitin receptor [@saini_cxc_2010], and human HIV co-receptor [@alkhatib_biology_2009]. @triantafilou_cd14-independent_2001 included CXCR4 among a group of five LPS-associated proteins that bind LPS in a manner similar to TLRs. GBB4 is involved in peripheral nerve function in humans, and mutations are associated with Charcot-Marie-Tooth Disease [@soong_exome_2013]. Overexpression of GBB4 promotes cell growth and shortens the cell cycle in human breast cancer cells [@wang_suppressive_2018]. To our knowledge, neither been associated with cnidarian immunity before.
+
+Two antigen processing genes were highly DE; Proteasome activator subunit 2 (PSME2/PA28 beta) was up-regulated for *Vibrio*, and regulator factor X-associated ankyrin-containing protein (RFXK) was down-regulated for menthol. Proteasomes are involved in antigen processing [@michalek_role_1993] and degradation of other intracellular proteins [@tanaka_proteasome:_2009], including cytotoxic damaged proteins resulting from the oxidative stress of an immune response [@kammerl_proteasome_2016]. @traylor-knowles_early_2017 observed up-regulation of proteasome components in *Acropora hyacinthus* exposed to heat stress. To our knowledge, we are the first to report up-regulation of proteasomal proteins in response to bacterial immune challenge in cnidarians.
+
+RFXK proteins are transcription factors that bind to the X-box motif, and they are associated with major histocompatibility complex (MHC) genes in vertebrates [@aftab_identification_2008]. They have been found in the genomes of *Saccharomyces cerevisiae*,  *Schizosaccharomyces pombe*, *Caenorhabditis elegans*, and *Drosophila melanogaster*, but their function in invertebrates is not well characterized [@aftab_identification_2008]. To our knowledge, we are the first to report down-regulation of RFXK in response to chemical stress (menthol).
+
+### Transport and catabolism
+
+Within transport and catabolism (peroxisome, endocytosis, lysosome), there were more genes highly down-regulated than up-regulated with 5 up-regulated (HRS, HSE1, CLH, PAOX, AP3D) and 8 down-regulated (CXCR4, VPS4, PLD2, SOX, LCFB, DHRS4, GNPAT, GALNS) for *Vibrio* and 3 up-regulated (PAOX, EASC, PAG15) and 4 down-regulated (JUNO, GNPAT, BAAT, BGLR) for menthol. Once a pathogen has been recognized, endosomes, lysosomes, and peroxisomes are involved in their engulfment, destruction, and clearance [@di_cara_peroxisome-mediated_2017-1]. 
+
+### Endocytosis
+
+Endocytosis pathway had six highly expressed DE genes; three genes were up-regulated for *Vibrio* (HRS, HSE1, CLH), 2 genes were down-regulated for *Vibrio* (VPS4, PLD2), and one gene was down-regulated for menthol (JUNO). Following recognition by toll-like receptors, pathogens are engulfed by clathrin-mediated endocytosis [@husebye_endocytic_2006]. In *Drosophila*, endocytosis is required for activation of the Toll pathway, and endosomal proteins Mop and Hrs colocalize with the Toll receptor in endosomes [@huang_endocytic_2010]. Although we observed more down-regulation than up-regulation of genes within the endocytosis pathway, those which were up-regulated in response to *Vibrio* (hepatocyte growth factor-regulated tyrosine kinase substrate HRS, clathrin-heavy chain CLH, signal transducing adaptor molecule HSE1) are consistent with recognition by TLR pathway followed by clathrin-mediated endocytosis. 
+
+HRS plays a role in endosome membrane invagination and formation of multivesicular bodies, HSE1 is a component of the sorting receptor complex for ubiquitinated cargo proteins at the multivesicular body [@ren_hse1_2007], and clathrin heavy chain (CLH) is the major protein of the polyhedral coat of coated pits and vesicles [@pearse_structure_1987]. Up-regulation of CLH has been observed in WBD-infected Acropora cervicornis [@libro_genetic_2016]. None of the other genes have been associated with anthozoan immunity or symbioses.
+
+### Peroxisome
+
+Peroxisome pathway had 7 highly expressed DE genes; one gene was up for both *Vibrio* and menthol exposure (PAOX), 3 genes were down for *Vibrio* only (SOX, LCFB, DHRS4), one gene was down for both (GNPAT), one gene was up for menthol only (EASC) and one gene was down for menthol only (BAAT). In a *Drosophila* knockdown study, @di_cara_peroxisome-mediated_2017 demonstrated that peroxisome genes Pex5 and Pex7 are required for the Toll-dependent production of anti-microbial peptides (AMP). N1-acetylpolyamine oxidase (PAOX) is a polyamine oxidase that oxidizes N1-acetylspermine to spermidine and hydrogen peroxide [@vujcic_genomic_2003]. PAOX has been previously observed to be up-regulated in disease infected *Acropora cervicornis* [@libro_genetic_2016], and up-regulated in aposymbiotic *Anemonia viridis* anemones [@philippe_ganot_adaptations_2011]. Dihydroxyacetone phosphate acyltransferase (GNPAT/DHAPAT) is involved in production of lipid molecules called plasmalogens [@braverman_functions_2012]. @lehnert_extensive_2014 observed up-regulation of GNPAT/DHAPAT in symbiotic *Aiptasia*. To our knowledge, DE of GNPAT has not been reported in cnidarians following immune challenge.
+
+### Lysosome
+
+Lysosome had four highly DE genes; AP-3 complex subunit delta (AP3D) was up-regulated for *Vibrio*, N-acetylgalactosamine-6-sulfatase (GALNS) was down-regulated for *Vibrio*, and lysophospholipase III (PAG15) and beta-glucuronidase (BGLR) were both down-regulated for menthol. Lysosomes are membrane-bound organelles that contain enzymes which, in the context of immune function, digest pathogens [@saftig_lysosome_2009]. AP3D facilitates formation of vesicles from the Golgi membrane and may be involved in trafficking to lysosomes [@odorizzi_ap-3_1998]. GALNS is an enzyme involved the breakdown of mucopolysaccharides [@hori_mucopolysaccharidosis_1995]. Phospholipases have been identified as components of *Aiptasia* nematocyst venom [@grotendorst_enzymatic_2000], so the upregulation of PAG15 in response to menthol may be a defense response. $\beta$-Glucuronidase (BGLR) is an enzyme involved in the degradation of glycosaminoglycan [@naz_human_2013]. Cell-surface glycans of *Symbiodinum* have been proposed as a means of host identification of symbionts [@logan_flowcytometric_2010], so the down-regulation of BGLR in response to menthol may be associated with the absence of the symbionts and associated cell-surface glycans in the menthol-bleached anemones. To our knowledge we are the first to report down-regulation of BGLR in bleached *Aiptasia*.
+
+### Apoptosis - programmed cell death
+
+Apoptosis pathway had 5 highly expressed DE genes; two caspases were up-regulated for *Vibrio* (CASP7, CASP9), TBA was down-regulated for *Vibrio*, P53 was up-regulated for menthol, and BIRC5 was down-regulated for menthol. Apoptosis has been proposed as a means of removing *Symbiodinium* during thermal bleaching [@kvitt_regulation_2016; @dunn_apoptosis_2007; @rodriguez-lanetty_transcriptome_2006; @pernice_regulation_2011] as well as clearing pathogens in the immune response [@libro_rna-seq_2013; @fuess_life_2017]. Caspases are key initiators of apoptosis [@mcilwain_caspase_2013]. Up-regulation of CASP7 and CASP9 have not been previously reported in cnidarians, but up-regulation of caspase-3 was documented in WBD-infected *Acropora cervicornis* [@libro_genetic_2016]. Tubulin alpha (TBA) was also down-regulated due to *Vibrio* exposure in *Aiptasia*. Down-regulation of tubulin beta has been observed for WBD-infected *Acropora cervicornis* as well [@libro_genetic_2016].
+
+Two DE apoptosis genes for menthol (P53, BIRC5) suggest apoptosis is a mechanism for menthol bleaching. Tumor protein P53 regulates a number of cell cycle functions including apoptosis, regulation of autophagy, cell-cycle arrest, and senescence [@zilfou_tumor_2009]. @lesser_exposure_2004 observed up-regulation of P53 in corals exposed to increased solar radiation and @weis_cellular_2008 proposed activation of P53 by the reactive nitrogen species nitric oxide (NO) in thermally-stressed corals as a mechanism of bleaching. The up-regulation of P53 in menthol-bleached anemones may indicate that the mechanism of menthol-induced bleaching is similar to the mechanisms of bleaching in thermal and solar radiation-stressed corals. The second DE apoptosis gene for menthol BIRC5, also known as Survivin, is an anti-apoptotic caspase inhibitor [@fengzhi_li_control_1998]. The down-regulation of BIRC5 for menthol-bleached anemones lends further support to apoptosis as a mechanism of menthol bleaching.
+
+### Conclusion
+
+Exposure to live *Vibrio coralliilyticus* and menthol had strong and significant impacts on gene expression, but their effects were independent or additive, not interactive. *Vibrio* exposure had the strongest impact, and the pathways most affected were the complement and coagulation cascades, NOD/Toll receptor signaling, and apoptosis. Despite the absence of canonical NOD and Toll receptors in the *Aiptasia* genome, the downstream signaling indicates involvement of NOD and Toll pathways in the anthozoan immune response. Future studies will be required to determine if *Aiptasia* possess some functional equivalent to NOD-like and Toll-like receptors, and how such receptors interact with down-stream signalling pathways. Menthol exposure resulted in the up-regulation of genes within the coagulation cascade and pro-apoptotic P53 as well as down-regulation of anti-apoptotic BIRC5, indicating that menthol-induced bleaching may involve apoptotic mechanisms similar to those involved in thermal-stress-induced bleaching.
+
+### Acknowledgments
+
+The authors would like to thank Stefan T. Kaluziak for assistance with Bioinformatics server support and assistance with Bioinformatics analysis. Research was funded by NSF award OCE-1458158 to SVV.
+
+\singlespacing
+### References 
+\setlength{\parindent}{-0.2in}
+\setlength{\leftskip}{0.2in}
+\setlength{\parskip}{8pt}
+<div id="refs"></div>
+\doublespacing
+\setlength{\parindent}{0.2in}
+
+### Supporting Information
+
+### Supplementary File S1
+
+Two-way ANOVA of read mappings as .csv
+
+### Supplementary File S2
+
+DESeq2 output and merged annotation data as .csv
+
+### Supplementary File S3
+
+Salmon read mappings
+
+### Supplementary File S4
+
+*Aiptasia* to KEGG ortholog mappings aipAnnot.csv.
+
+### Data Accessibility
+
+The Illumina RNA-Seq read data (.fastq) are available on NCBI SRA https://www.ncbi.nlm.nih.gov/sra under BioProject accession number PRJNANNNNNN, and normalized read count data (.csv) and annotation files (.csv) are available on Dryad doi:XXXXXXXXX.
+
+### Author Contributions
+
+CLR and SVV conceived and designed the experiment and wrote the manuscript. CLR generated and analyzed the data.
+
+

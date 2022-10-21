@@ -1,0 +1,78 @@
+---
+title: "Multivariate Aiptasia Expression Analyses"
+author: "Chuck Roesel"
+date: "09/29/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+source("http://faraway.neu.edu/data/Rprofile")
+```
+
+## Data preparation
+
+Load packages and the extract our data:
+
+```{r}
+# Load packages
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+# Load results
+load("multivariate_aiptasia_expression.RData")
+```
+
+In this case, we're working with Hellinger-transformed expression data.
+
+## Analyses for all time steps
+
+Perform nMDS and correlate explanatory variables to its axes:
+
+```{r echo = FALSE}
+# Show the factors
+env_all_table <- as.data.frame(rbind(env_all$factors$r, env_all$factors$pvals))
+rownames(env_all_table) <- c("Correlation", "P-value")
+kable(env_all_table)
+```
+
+Both explanatory variables are significantly related to the nMDS axes. Here's a plot of
+the nMDS:
+
+```{r echo = FALSE}
+coords <- nmds_norm_hell$points
+par(plotconf)
+plot(coords[, 1], coords[, 2], xlab = "nMDS 1", ylab = "", type = "n",
+     xlim = c(-0.1, 0.1), ylim = c(-0.1, 0.1))
+mbox()
+ylabel("nMDS 2")
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_hell, phenos$Vibrio, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+xy_minus <- vegan:::veganCovEllipse(ellipse_coords$Control$cov, 
+                                    ellipse_coords$Control$center, sqrt(qchisq(conf, 2)))
+xy_plus <- vegan:::veganCovEllipse(ellipse_coords$Vibrio$cov, 
+                                   ellipse_coords$Vibrio$center, sqrt(qchisq(conf, 2)))
+vegan:::ordiArgAbsorber(xy_minus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['blue'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$Control$center[1], y = ellipse_coords$Control$center[2],
+     labels = "-Vibrio", col = cb["blue"])
+vegan:::ordiArgAbsorber(xy_plus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['red'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$Vibrio$center[1], y = ellipse_coords$Vibrio$center[2], 
+     labels = "+Vibrio", col = cb["red"])
+ordiellipse(nmds_norm_hell, phenos$Menthol, kind="se", conf=0.95, lwd=2, 
+            draw = "poly", col = c("black"), alpha = 40, label = TRUE)
+
+```
+
+And the PERMANOVA:
+
+```{r echo = FALSE}
+kable(permanova$aov.tab)
+```
+

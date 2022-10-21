@@ -1,0 +1,121 @@
+---
+title: "Aiptasia Network Analysis"
+author: "Chuck Roesel"
+date: "3/24/2018"
+output:
+  pdf_document:
+    fig_caption: true
+  html_document:
+    df_print: paged
+  md_document:
+    variant: gfm
+    df_print: paged
+  word_document: default
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(linkcomm)
+library(igraph)
+```
+
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaGeneLevelAnalysis.RData")
+```
+
+
+```{r}
+network <- data.frame()
+networkB <- data.frame()
+vertexA <- data.frame()
+for (pathway1 in unique(genePath$PathDesc)){
+    v1 <- subset(genePath, PathDesc == pathway1)
+        pathA <- unlist(strsplit(pathway1,  " ", fixed = FALSE, 
+                                 perl = FALSE, useBytes = FALSE))
+        pathA <- pathA[2]
+    vertexA[pathA, "size"] <- length(unique(v1$KO))    
+  for (pathway2 in unique(genePath$PathDesc)){
+        pathB <- unlist(strsplit(pathway2,  " ", fixed = FALSE, 
+                                 perl = FALSE, useBytes = FALSE))
+        pathB <- pathB[2]
+    v2 <- subset(genePath, PathDesc == pathway2)
+    commonCount <- length(intersect(unique(v1$KO), unique(v2$KO)))
+    unionCount <- length(union(unique(v1$KO), unique(v2$KO)))
+    percentCommon <- (commonCount/unionCount)*100
+    if(pathway1 != pathway2){
+      if(commonCount > 0){
+        rowNum <- nrow(network) + 1
+        network[rowNum,"from"] <- pathA
+        network[rowNum, "to"] <- pathB
+        network[rowNum, "weight"] <- commonCount
+        for (gene in intersect(unique(v1$KO), unique(v2$KO))){
+        rowNumB <- nrow(networkB) + 1
+        networkB[rowNumB,"Pathway1"] <- pathA
+        networkB[rowNumB, "Pathway2"] <- pathB
+        networkB[rowNumB, "Gene"] <- gene
+        }
+      }
+      #pathSummary[pathway1, pathway2] <-commonCount
+    }
+  }
+}
+write.csv(network, file="Network.csv")
+write.csv(networkB, file="NetworkB.csv")
+#write.csv(pathSummary, file="pathSummary.csv")
+```
+
+\clearpage
+
+```{r}
+
+pathIGraph <- graph_from_data_frame(network, directed = F)
+pathIGraph <- simplify( pathIGraph, remove.multiple = T, remove.loops = T, 
+                        edge.attr.comb=c(weight="mean", type="ignore") )
+dfVertices <- as_data_frame(pathIGraph, what = c("vertices"))
+dfEdges <- as_data_frame(pathIGraph, what = c("edges"))
+dfVertices <- merge(dfVertices, vertexA, by=0)
+rownames(dfVertices) <- dfVertices$name
+dfVertices <- subset(dfVertices, select=-c(Row.names))
+g <- graph_from_data_frame(dfEdges, directed=F, vertices=dfVertices)
+E(g)$width <- E(g)$weight
+```
+\clearpage
+
+```{r fig.height=10, fig.width=20}
+plot(g, vertex.shape="circle", vertex.color=c("white"), vertex.label.cex=1)
+```
+
+\clearpage
+
+```{r fig.height=10, fig.width=20}
+plot(g, vertex.shape="circle", vertex.color=c("white"), vertex.label.cex=1, layout=layout_in_circle)
+```
+
+\clearpage
+
+```{r fig.height=10, fig.width=20}
+plot(g, vertex.shape="circle", vertex.color=c("white"), vertex.label.cex=1, layout=layout_nicely)
+```
+
+\clearpage
+
+```{r fig.height=10, fig.width=20}
+plot(g, vertex.shape="circle", vertex.color=c("white"), vertex.label.cex=1, layout=layout_with_gem)
+```
+
+\clearpage
+
+```{r fig.height=10, fig.width=20}
+plot(g, vertex.shape="circle", vertex.color=c("white"), vertex.label.cex=1, layout=layout_components)
+```

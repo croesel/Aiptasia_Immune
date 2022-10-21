@@ -1,0 +1,25 @@
+---
+title: "Methods"
+output: pdf_document
+---
+
+**Methods**
+
+Aposymbiotic anemones were produced by exposure to 0.58 mM menthol/ASW using a modified version of the protocol outlined by Wang, Chen, Tew, Meng, and Chen (2012). Wild anemones were obtained from Carolina Biological Supply. These anemones, collected off the coast of North Carolina and kept in holding tanks [^Carolina2015], are the source from which the widely-used cc7 clonal population was developed [^Sunagawa2009]. The wild anemones are much larger than the available cc7 clones, and this facilitated extraction of sufficient high-quality RNA without requiring pooling within treatment groups.
+
+Upon arrival the anemones were placed in six six-well plates and maintained in the wells for a one-week acclimation phase. They were exposed to a 12-hour day/night cycle with a light intensity of 70 umol quanta m<sup>-2</sup> s<sup>-1</sup>. To avoid contamination of the RNA with any partially digested food the anemones were not fed during the acclimation phase. To avoid any bias based on lighting intensity or other positional effects, the four treatment groups were randomly assigned to wells within six-well plates.
+
+The menthol exposure was on a 48-hour cycle, with a 24-hour menthol exposure followed by a 24-hour resting period in ASW. A total of 36 anemones were put through the bleaching cycle. During the bleaching cycle, 18 anemones had water replaced with .58 mM menthol/FNSW, and 18 had water replaced with fresh FNSW. Six bleached and six unbleached anemones were homogenized prior to the Vibrio/Control treatment to determine the degree of bleaching. The degree of bleaching was measured by homogenizing anemones in 1uL filtered seawater, counting zoox with a hemocytometer, and normalizing by animal weight. After the 24-hour resting period in FNSW, the remaining 24 anemones were divided into four treatment groups:
+
+|            | Live *Vibrio* | Sterile Seawater |
+| ---------- | ------------- | ---------------- |
+| Bleached   | 6 anemones    | 6 anemones       |
+| Unbleached | 6 anemones    | 6 anemones       |
+
+The live *Vibrio* groups were inoculated at a concentration of 10<sup>8</sup> CFU ml<sup>-1</sup> in FNSW. The *Vibrio* inoculate was produced by centrifuging marine broth cultures, drawing off the broth, and re-suspending the pellet in FNSW. The anemones were exposed to either Vibrio or control for 24 hours, then immediately homogenized in Tri-Reagent.
+
+The anemones were homogenized using BioMasher mortar and pestle sets. Each anemone was first homogenized in 900 uL Tri-Reagent, then the 900 uL was divided into three separate tubes to which an additional 600 uL Tri-Reagent was added to ensure sufficient Tri-Reagent to completely lyse the cells. RNA was isolated separately from each of the 72 homogenate tubes per the Tri-Reagent manufacturer’s protocol. The total RNA was analyzed on an Agilent BioAnalyzer to obtain RIN scores.
+
+For each of the 24 samples the RNA isolate with the highest RIN score was selected to proceed to mRNA isolation and library preparation. mRNA was isolated using the NEBNext<sup>®</sup> Poly(A) mRNA Magnetic Isolation Module and Illumina libraries were produced using the NEBNext<sup>®</sup> Ultra<sup>™</sup> Directional RNA Library Prep Kit for Illumina<sup>®</sup>.
+
+Multiplexed paired-end libraries were sequenced on an Illumina HiSeq 2500 platform at the FAS Center for System Biology at Harvard University. The reads were adapter and quality-trimmed using Trimmomatic version 0.36 [^Bolger2014] using a 4-base sliding-window quality cutoff of 30 (Phred+33) and the TruSeq3 adapter sequence file (TruSeq3-PE.fa). Transcript counts were quantified against the published Aiptasia predicted coding sequences [^Baumgarten2014] using Salmon [^Patro2017]. The transcript counts were imported into DESeq2 [^Love2014] using tximport [^Soneson2015]. The transcript-to-gene mapping and annotation file was created by aligning predicted coding sequences to Swiss-Prot [^UniProt2017] using blastx [^NCBI2017].

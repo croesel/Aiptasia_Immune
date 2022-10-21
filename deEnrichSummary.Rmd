@@ -1,0 +1,63 @@
+---
+output:
+  pdf_document:
+    includes:
+      in_header: mainTables.tex
+      keep_tex: true
+  md_document:
+    variant: gfm
+    df_print: paged
+  html_document:
+    df_print: paged
+  word_document: default
+classoption: portrait
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, warning=FALSE, message=FALSE)
+library("knitr")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("kableExtra")
+library("pander")
+library(igraph)
+library(latexpdf)
+```
+
+
+```{r enrichDeSummaryUnfiltered, results='asis', dev=c('pdf', 'svg')}
+barPlotTable <- read.csv("barPlotTable.csv", row.names = 1, stringsAsFactors = F)
+barPlotTable$Rank[(barPlotTable$Category == 'Immune system')] <- 1
+barPlotTable$Rank[(barPlotTable$Category == 'Cell growth and death')] <- 3
+barPlotTable$Rank[(barPlotTable$Category == 'Transport and catabolism')] <- 2
+barPlotTable$Rank[(barPlotTable$Category == 'Signaling molecules and interaction')] <- 4
+barPlotTable <- arrange(barPlotTable,Rank,desc(dirV),desc(dirM))
+barPlotTable2 <- subset(barPlotTable, select=c("ID", "PathDesc", "V","M","DE.Total","dirV2","dirM2","uVT",
+                                                    "dVT", "uMT", "dMT"))
+
+colnames(barPlotTable2) <- c("ID", "Description", "V","M","DE/Total","V","M","+V",
+                                                    "-V", "+M", "-M")
+kableIn <- kable(barPlotTable2, 
+                 caption="DE Genes in Pathways Enriched Vibrio and Menthol", digits=3, 
+                 format="latex", booktabs=T, longtable=T, row.names = F) %>% 
+  kable_styling(latex_options=c("striped", "repeat_header"), full_width = F) %>% 
+  add_header_above(c("Pathway" = 2, "Enriched" = 2,  
+                     "Differential Expression" = 7), align="l")%>% column_spec(2, width = "15em")
+#Loop through all categories and insert a header for each category
+for(category in unique(barPlotTable$Category)){
+  #Pass in the latex table and add one category header.
+  kableIn <- group_rows(kableIn, category, min(grep(category, barPlotTable$Category)), 
+                        max(grep(category, barPlotTable$Category)), hline_before = T,
+                        latex_gap_space = "0.3em")
+}
+#as.pdf(barPlotTable2)
+fileConn<-file("barPlotTable.tex")
+writeLines(kableIn, fileConn)
+close(fileConn)
+print(kableIn)
+#tex2pdf("barPlotTable.tex")
+```
+
+\clearpage
+

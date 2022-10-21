@@ -1,0 +1,56 @@
+---
+title: "KEGG Pathway Coverage, Aip and Acerv Genomes"
+author: "Chuck Roesel"
+date: "02/06/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r Load Libraries, message=FALSE, warning=FALSE, paged.print=FALSE}
+library("knitr")
+library("kableExtra")
+```
+
+```{r results='asis'}
+aipBlastCoverage <- read.csv("keggUniProt/kCoverage.csv", sep=',', header=FALSE, quote='', stringsAsFactors = FALSE)
+aipBlastCoverage <- aggregate(V3~.,FUN=max,data=aipBlastCoverage)
+#head(aipBlastCoverage)
+#mean(aipBlastCoverage$V3)
+acervBlastCoverage <- read.csv("keggAcerv/kCoverage.csv", sep=',', header=FALSE, quote='', stringsAsFactors = FALSE)
+acervBlastCoverage <- aggregate(V3~.,FUN=max,data=acervBlastCoverage)
+#head(acervBlastCoverage)
+#mean(acervBlastCoverage$V3)
+hist(acervBlastCoverage$V3)
+hist(aipBlastCoverage$V3)
+```
+
+```{r results='asis'}
+keggPathways <- read.table("koToPathway.tsv", sep='\t', header=TRUE, quote='')
+totalCountsPath <- aggregate(Gene~PathDesc,FUN=length,data=unique(keggPathways))
+colnames(totalCountsPath) = c("PathDesc","Total")
+tx2geneAcerv <- read.csv("tx2geneAcerv.tsv", header=FALSE)
+tx2geneAip <- read.csv("tx2gene.csv", header=FALSE)
+colnames(tx2geneAcerv) <- c("Acerv", "Gene")
+colnames(tx2geneAip) <- c("Aip", "Gene")
+aipCount <- length(unique(tx2geneAip$Gene))
+acervCount <- length(unique(tx2geneAcerv$Gene))
+cat("Aiptasia Pathway genes:", aipCount, "\n")
+cat("Acerv Pathway Genes:", acervCount, "\n")
+inGenomeAcerv <- merge(keggPathways, tx2geneAcerv)
+inGenomeAip <- merge(keggPathways, tx2geneAip)
+inGenomeAcerv <- unique(subset(inGenomeAcerv, select=c("Gene", "PathDesc")))
+inGenomeAip <- unique(subset(inGenomeAip, select=c("Gene", "PathDesc")))
+genomeCountsAcerv <- aggregate(Gene~PathDesc,FUN=length,data=inGenomeAcerv)
+genomeCountsAip <- aggregate(Gene~PathDesc,FUN=length,data=inGenomeAip)
+colnames(genomeCountsAcerv) = c("PathDesc","Acerv")
+colnames(genomeCountsAip) = c("PathDesc","Aip")
+allPathCounts <- merge(totalCountsPath, genomeCountsAcerv, by='PathDesc',all.x=TRUE)
+allPathCounts <- merge(allPathCounts, genomeCountsAip, by='PathDesc',all.x=TRUE)
+allPathCounts$AcervPct <-with(allPathCounts, Acerv/Total)
+allPathCounts$AcervPct <- sprintf("%1.1f", 100*allPathCounts$AcervPct) 
+allPathCounts$AipPct <-with(allPathCounts, Aip/Total)
+allPathCounts$AipPct <- sprintf("%1.1f", 100*allPathCounts$AipPct) 
+kable(allPathCounts)
+```
+

@@ -1,0 +1,66 @@
+---
+title: "Aiptasia - Cervicornis Comparison"
+author: "Chuck Roesel"
+date: "3/8/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(DESeq2)
+library(dplyr)
+library(tidyr)
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaFigsAndTables.RData")
+load("GeneMappings.RData")
+```
+
+Load the DE information from Libro2013
+
+```{r}
+acerv <- read.csv("pone-0081821-t002.csv", stringsAsFactors = F)
+acerv <- subset(acerv, Uniprot.ID != '',select=c("DE.transcripts", "Uniprot.ID","Function", "log2..Fold.Change."))
+acerv
+```
+
+Map the Acerv UniProt IDs to  KEGG orthologs
+
+```{r}
+uniToKO <- read.table("keggUniProt/uniToKO.tsv", sep="\t", stringsAsFactors = F, header=F)
+uniToKO <- unique(subset(uniToKO, select=c("V2", "V10", "V11")))
+colnames(uniToKO) <- c("Uniprot.ID", "KO", "Desc")
+acervKO <- merge(acerv, uniToKO)
+head(acervKO)
+```
+
+
+```{r}
+resVibrio <- results(ddsAll, alpha=.05, name="Vibrio_Vibrio_vs_NoVibrio")
+upVibrio <- subset(resVibrio, padj < .05 & log2FoldChange > 0, select=c("log2FoldChange","padj"))
+upVibrio <- data.frame(upVibrio)
+upVibrio <- merge(upVibrio, koDesc, by.x=0, by.y="KO")
+rownames(upVibrio) <- upVibrio$Row.names
+upVibrio <- subset(upVibrio, select =-c(Row.names))
+upAipAcerv <- merge(acervKO, upVibrio, by.x="KO", by.y=0)
+upAipAcerv
+```
+```{r}
+lanetty <- read.csv("lanettyProteomics.csv")
+lanetty <- merge(lanetty, everyID, by.x="AIP", by.y="Aip")
+lanetty <- merge(lanetty, upVibrio, by.x="KOcr", by.y=0)
+head(lanetty)
+```
+
+```{r}
+head(upVibrio)
+```
+```{r}
+upVibrioEveryID <- merge(upVibrio, everyID, by.x=0, by.y="KOcr")
+head(upVibrioEveryID)
+write.csv(upVibrioEveryID, file="upVibrioEveryID")
+```

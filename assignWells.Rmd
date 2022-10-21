@@ -1,0 +1,23 @@
+---
+title: "assignWells"
+author: "Chuck Roesel"
+date: "6/1/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("knitr")
+```
+
+
+```{r}
+treatmentGroups <- c("MentholVibrio", "MentholNoVibrio", "MentholCountZoox", 
+                     "NoMentholVibrio", "NoMentholNoVibrio", "NoMentholCountZoox")
+samples <- seq(from=1, to=36, by=1)
+ind <- sample(rep(1:6, each=length(samples)/6))
+assignments <- lapply(split(1:length(samples),ind),function(i) samples[i])
+dfAssignments <- as.data.frame(assignments)
+colnames(dfAssignments) <- treatmentGroups
+kable(t(dfAssignments))
+```

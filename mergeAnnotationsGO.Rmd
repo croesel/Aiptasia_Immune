@@ -1,0 +1,53 @@
+---
+title: "mergeAnnotationsGO.pl"
+author: "Chuck Roesel"
+date: "11/01/2017"
+output: html_document
+---
+Standard perl header
+```{perl echo=TRUE}
+#!/bin/perl
+use warnings;
+use strict;
+#```
+#Read spToGo.tsv line by line and split on tabs. Load to hash with swissProt as key and go as #value
+#```{perl}
+my %spToGo;
+open( SP_TO_GO,   "<", "spToGo.tsv" )      or die $!;
+while (<SP_TO_GO>) {
+	chomp;
+	my ( $swissProt, $go ) = split( "\t", $_ );
+	$spToGo{$swissProt}{$go}++;
+}
+```
+Read bioProcess.tsv line-by-line and split on tabs. Load to hash with id as key 
+```{perl}
+my %goToName;
+open( BIO_PROC,   "<", "bioProcess.tsv" )  or die $!;
+while (<BIO_PROC>) {
+	chomp;
+	my ( $id, $name ) = split( "\t", $_ );
+	$goToName{$id} = $name;
+}
+```
+Read trinitySpGo.tsv line by line
+```{perl}
+open( TRIN_SP_GO, ">", "trinitySpGo.tsv" ) or die $!;
+open( SP, "<", "aipSwissProt.tsv" ) or die $!;
+while (<SP>) {
+	chomp;
+	my ( $trinity, $swissProt, $description, $eValue ) =
+	  split( "\t", $_ );
+	if ( defined $spToGo{$swissProt} ) {
+		foreach my $go ( sort keys %{$spToGo{$swissProt}} ) {
+			if ( defined $goToName{$go} ) {
+				my $goName = $goToName{$go};
+				print TRIN_SP_GO
+				  join( "\t", $trinity, $description, $swissProt, $go,
+					$goName ), "\n";
+			}
+		}
+	}
+}
+
+```

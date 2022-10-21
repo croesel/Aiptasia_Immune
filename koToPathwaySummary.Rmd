@@ -1,0 +1,19 @@
+---
+title: "koToPathwaySummary"
+author: "Chuck Roesel"
+date: "6/8/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+koToPathway <- read.table("koToPathway.tsv", sep="\t", header=T, stringsAsFactors = F)
+head(koToPathway)
+koCount <- aggregate(Gene ~ Path, data=koToPathway, FUN=NROW)
+colnames(koCount) <- c("pathId", "GeneCount")
+write.csv(koCount, file="koByPathwayCount.csv", row.names = F)
+```

@@ -1,0 +1,152 @@
+---
+title: "DESeq2 Up/Down Summary and Plots"
+author: "Chuck Roesel"
+date: "11/30/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+Select Genes by GO Term. So far this is just searching for immune, but will make this function generic to produce a plot for any search term.
+```{r Load Libraries, message=FALSE, warning=FALSE, paged.print=FALSE}
+load("D_upDownSummary.RData")
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("GO.db")
+#install.packages("stringr")
+#install.packages("tidyr")
+#install.packages("UpSetR")
+#install.packages("kableExtra")
+library("UpSetR")
+library("stringr")
+library("gdata")
+library("tidyr")
+library("dplyr")
+library("GO.db")
+library("knitr")
+library("pander")
+library("kableExtra")
+options(knitr.table.format="latex")
+```
+
+Load Annotations from Published Genome
+```{r Load Published Genome Annotations, message=FALSE, warning=FALSE, paged.print=FALSE}
+geneGo = read.xls (("pnas.1513318112.sd01.xlsx"), header = FALSE, sheet=1)
+keggComplement = read.xls (("pnas.1513318112.sd01.xlsx"), header = FALSE, sheet=8)
+keggToll = read.xls (("pnas.1513318112.sd01.xlsx"), header = FALSE, sheet=9)
+keggNod = read.xls (("pnas.1513318112.sd01.xlsx"), header = FALSE, sheet=10)
+```
+
+Extract Gene Names to Match GFF3 IDs
+```{r}
+
+findGene <- function(geneString){
+  gene <- str_match(geneString, "GN=(.*) PE")[2]
+  return(gene)
+}
+findDesc <- function(geneString){
+  desc <- str_match(geneString, "(.*) OS=")[2]
+  return(desc)
+}
+geneGo2 <- geneGo
+geneGo2$gene <- sapply(geneGo2$V4, findGene)
+geneGo2$desc <- sapply(geneGo2$V4, findDesc)
+geneGo2$gene[is.na(geneGo2$gene)] <- paste0('AC249_',as.character(geneGo2$V1[is.na(geneGo2$gene)]))
+rownames(geneGo2) <- make.names(geneGo2$gene, unique=TRUE)
+gene2Gff3Gene <- subset(geneGo2, select=c(V1))
+gene2Gff3Gene$gff3 <- rownames(gene2Gff3Gene)
+rownames(gene2Gff3Gene) <- gene2Gff3Gene$V1
+gene2Gff3Gene <- subset(gene2Gff3Gene, select=c(gff3))
+```
+
+```{r}
+mapGeneNames <- function(keggSubset){
+  rownames(keggSubset) <- make.names(keggSubset$V1, unique=TRUE)
+  keggSubset2 <- merge(keggSubset, gene2Gff3Gene, by=0)
+  rownames(keggSubset2) <- make.names(keggSubset2$gff3, unique=TRUE)
+  return(keggSubset2)
+}
+keggComplement2 <- mapGeneNames(keggComplement)
+keggNod2 <- mapGeneNames(keggNod)
+keggToll2 <- mapGeneNames(keggToll)
+geneGo2 <- subset(geneGo2, select=c("gene", "V4", "V12", "desc"))
+colnames(geneGo2) <- c("gene", "geneDesc", "goTerms", "desc")
+```
+
+If no gene symbol, use AIP gene
+```{r}
+goterms = unlist(Term(GOTERM))
+geneGo3 <- geneGo2 %>% 
+  mutate(goTerms = strsplit(as.character(goTerms), ",")) %>% 
+  unnest(goTerms)
+geneGo4 <- subset(geneGo3, select=c("gene", "desc", "goTerms"))
+```
+Set Diagram
+```{r}
+listInput = list(UpVibrio = rownames(upVibrio), UpMenthol= rownames(upMenthol), DownVibrio=rownames(downVibrio), DownMenthol=rownames(downMenthol), UpInteraction=rownames(upInter), DownInteraction=rownames(downInter))
+bothCount$gene = rownames(bothCount)
+colnames(bothCount) = c("VibrioUp", "VibrioDown", "MentholUp", "MentholDown", "InteractionUp", "InteractionDown", "gene")
+upset(bothCount, order.by = "freq", nsets=6)
+```
+
+```{r message=TRUE, warning=TRUE, paged.print=TRUE}
+grepGo <- function(searchTerm){
+  immune = grep(searchTerm, goterms)
+  #Get GO terms as a character vector
+  immuneTerms <- goterms[immune]
+  #Convert to a data frame that a normal person would want to use
+  dfTerms <- data.frame(term=names(immuneTerms), desc=immuneTerms, row.names=NULL)
+  rownames(dfTerms) = dfTerms$term
+  dfTerms <-subset(dfTerms, select=c("desc"))
+  geneGo3["GO terms" %in% rownames(dfTerms)]
+  geneGoImmune <- subset(geneGo3, geneGo3$goTerms %in% rownames(dfTerms)) 
+  immuneGenes <- sort(unique(geneGoImmune$gene))
+  return(immuneGenes)
+}
+```
+
+#DE with Annotated Gene Overlay 
+```{r}
+annotatedGenes <- function(row) {
+    data <- (substr(row["gene"], 1, 5) != 'AC249')
+}
+
+upset(bothCount, order.by = "freq", nsets=6, queries = list(list(query = annotatedGenes, color = "blue", active = T)))
+```
+
+#DE with Immune Gene Overlay
+```{r}
+tollGenes <- grepGo("toll")
+
+findImmuneGenes <- function(row) {
+    data <- (row["gene"] %in% tollGenes)
+}
+
+upset(bothCount, order.by = "freq", nsets=6, queries = list(list(query = findImmuneGenes, color = "blue", active = T)))
+```
+
+#Selected Genes Only
+```{r SummarizeSelected}
+summarizeSelected <- function(searchTerm){
+  title <- paste0('Search Term: ', searchTerm)
+  tollGenes <- grepGo(searchTerm)
+  kable(tollGenes, caption=searchTerm) %>%
+  kable_styling(bootstrap_options = c("bordered"), position="left")
+  immuneCount <- subset(bothCount, bothCount$gene %in% tollGenes)
+  upset(immuneCount, order.by = "freq", nsets=6, mainbar.y.label=title)
+  geneDesc <- (unique(subset(geneGo4, select=c(gene, desc))))
+  rownames(geneDesc) <- make.names(geneDesc$gene, unique=TRUE)
+  geneDesc <- subset(geneDesc, select=c(desc))
+  immuneDesc <- merge(immuneCount, geneDesc, by=0)
+  rownames(immuneDesc) <- immuneDesc$desc
+  immuneDesc <- subset(immuneDesc, select=-c(Row.names, gene, desc))
+  kable(immuneDesc, caption=title, col.names=c('V+', 'V-','M+', 'M-','I+', 'I-')) %>%
+  kable_styling(bootstrap_options = c("bordered"), position="left")
+}
+summarizeSelected("immune")
+summarizeSelected("toll")
+summarizeSelected("complement")
+summarizeSelected("nod")
+summarizeSelected("leucine")
+summarizeSelected("toxin")
+summarizeSelected("MAPK")
+summarizeSelected("antigen")
+```

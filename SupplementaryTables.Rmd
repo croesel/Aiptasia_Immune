@@ -1,0 +1,41 @@
+---
+title: "Supplementary Tables"
+author: "Chuck Roesel"
+date: "3/21/2018"
+output: 
+  pdf_document:
+    includes:
+      in_header: suppTables.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(knitr)
+library(dplyr)
+library(kableExtra)
+```
+
+\newpage
+
+```{r}
+dfAlignSumm <- read.csv(file="SupplementaryTables/dfAlignSumm.csv")
+dfAlignSumm <- subset(dfAlignSumm, select=-c(Sum.Sq))
+dfAlignSumm[is.na(dfAlignSumm)] <- ''
+kable(dfAlignSumm, caption="Two-way ANOVA, Read Mapping",col.names = c("Factor", "Df", "Mean Square", "F-value", "p-value"))
+```
+
+\newpage
+
+```{r}
+dfSummaries <- read.csv(file="SupplementaryTables/DECountSummary.csv")
+colnames(dfSummaries) <- c("Factor", "Up", "Down", "Total")
+dfSummaries$Factor <- c("Vibrio", "Menthol", "Interaction",
+                           "Vibrio", "Menthol", "Interaction","Vibrio", 
+                           "Menthol", "Interaction")
+kable(dfSummaries, "latex",caption = "Differentially Expressed Gene Counts", 
+      row.names = F, booktabs=T) %>% kable_styling("striped") %>% 
+  group_rows("All", 1, 3)%>% 
+  group_rows("Annotated", 4, 6)%>% 
+  group_rows("DE Using KEGG Ortholog", 7, 9)
+
+```

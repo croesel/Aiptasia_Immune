@@ -1,0 +1,99 @@
+---
+title: "DESeq2 Quasi-Poisson Comparison"
+author: "Chuck Roesel"
+date: "10/28/2017"
+output: html_document
+---
+#Merge DESeq2 and Quasi-Poisson Up/Down
+```{r}    
+vibrioQuasi <- read.csv(file="mergedUpdownVibrio.csv")
+mentholQuasi <- read.csv(file="mergedUpdownMenthol.csv")
+df <- read.csv(file = "geneAllQuasipoisson.csv",stringsAsFactors=FALSE)
+rownames(df) <- df$genename
+pValQuasi <-
+  subset(
+    df,
+    select = c(
+      pval.Menthol.fdr,
+      pval.Vibrio.fdr,
+      pval.Interaction.fdr,
+      abund_Control_Control,
+      abund_Menthol_Control,
+      abund_Control_Vibrio,
+      abund_Menthol_Vibrio
+    )
+  )
+pValQuasi$abundVibrioMinus <- (pValQuasi$abund_Control_Control + pValQuasi$abund_Menthol_Control)/2
+pValQuasi$abundMentholMinus <- (pValQuasi$abund_Control_Control + pValQuasi$abund_Control_Vibrio)/2
+pValQuasi$abundVibrioPlus <- (pValQuasi$abund_Control_Vibrio + pValQuasi$abund_Menthol_Vibrio)/2
+pValQuasi$abundMentholPlus <- (pValQuasi$abund_Menthol_Control + pValQuasi$abund_Menthol_Vibrio)/2
+delta <- 1
+pValQuasi$lfcMenthol <- log2((pValQuasi$abundMentholPlus + delta) / (pValQuasi$abundMentholMinus + delta))
+pValQuasi$lfcVibrio <- log2((pValQuasi$abundVibrioPlus + delta) / (pValQuasi$abundVibrioMinus + delta))
+pValQuasi <-
+  subset(
+    pValQuasi,
+    select = c(
+      pval.Menthol.fdr,
+      pval.Vibrio.fdr,
+      pval.Interaction.fdr,
+      lfcMenthol,
+      lfcVibrio
+    )
+  )
+dfBothAnnot <- read.csv("dfBothAnnot.csv",stringsAsFactors=FALSE)
+rownames(dfBothAnnot) <- dfBothAnnot$X
+dfBothAnnot <- subset(dfBothAnnot, select=-c(X))
+quasiAndD2 <- merge(dfBothAnnot, pValQuasi, by=0, all=TRUE)
+rownames(quasiAndD2) <- quasiAndD2$Row.names
+alpha <- .05
+quasiAndD2 <- subset(quasiAndD2, select=c(log2FoldChange.Menthol, lfcMenthol, padj.Menthol, pval.Menthol.fdr, log2FoldChange.Vibrio, lfcVibrio, padj.Vibrio, pval.Vibrio.fdr))
+quasiAndD2$VibrioDEQuasi <-(quasiAndD2$pval.Vibrio.fdr < alpha)
+quasiAndD2$VibrioDED2 <-(quasiAndD2$padj.Vibrio < alpha)
+quasiAndD2$MentholDEQuasi <-(quasiAndD2$pval.Menthol.fdr < alpha)
+quasiAndD2$MentholDED2 <-(quasiAndD2$padj.Menthol < alpha)
+quasiAndD2$UpDownVibrioQuasi[quasiAndD2$lfcVibrio < 0] <- "Down"
+quasiAndD2$UpDownVibrioD2[quasiAndD2$log2FoldChange.Vibrio < 0] <- "Down"
+quasiAndD2$UpDownVibrioQuasi[quasiAndD2$lfcVibrio > 0] <- "Up"
+quasiAndD2$UpDownVibrioD2[quasiAndD2$log2FoldChange.Vibrio > 0] <- "Up"
+quasiAndD2$UpDownMentholQuasi[quasiAndD2$lfcMenthol < 0] <- "Down"
+quasiAndD2$UpDownMentholD2[quasiAndD2$log2FoldChange.Menthol < 0] <- "Down"
+quasiAndD2$UpDownMentholQuasi[quasiAndD2$lfcMenthol > 0] <- "Up"
+quasiAndD2$UpDownMentholD2[quasiAndD2$log2FoldChange.Menthol > 0] <- "Up"
+quasiAndD2$downVibrioQuasi[(quasiAndD2$lfcVibrio < 0) & (quasiAndD2$pval.Vibrio.fdr < alpha)] <- 1
+quasiAndD2$upVibrioQuasi[(quasiAndD2$lfcVibrio > 0) & (quasiAndD2$pval.Vibrio.fdr < alpha)] <- 1
+quasiAndD2$downVibrioD2[(quasiAndD2$log2FoldChange.Vibrio < 0) & (quasiAndD2$padj.Vibrio < alpha)] <- 1
+quasiAndD2$upVibrioD2[(quasiAndD2$log2FoldChange.Vibrio > 0) & (quasiAndD2$padj.Vibrio < alpha)] <- 1
+quasiAndD2$downMentholQuasi[(quasiAndD2$lfcMenthol < 0) & (quasiAndD2$pval.Menthol.fdr < alpha)] <- 1
+quasiAndD2$upMentholQuasi[(quasiAndD2$lfcMenthol > 0) & (quasiAndD2$pval.Menthol.fdr < alpha)] <- 1
+quasiAndD2$downMentholD2[(quasiAndD2$log2FoldChange.Menthol < 0) & (quasiAndD2$padj.Menthol < alpha)] <- 1
+quasiAndD2$upMentholD2[(quasiAndD2$log2FoldChange.Menthol > 0) & (quasiAndD2$padj.Menthol < alpha)] <- 1
+quasiAndD2$upMentholD2[is.na(quasiAndD2$upMentholD2)] <- 0
+quasiAndD2$downMentholD2[is.na(quasiAndD2$downMentholD2)] <- 0
+quasiAndD2$upMentholQuasi[is.na(quasiAndD2$upMentholQuasi)] <- 0
+quasiAndD2$downMentholQuasi[is.na(quasiAndD2$downMentholQuasi)] <- 0
+quasiAndD2$upVibrioD2[is.na(quasiAndD2$upVibrioD2)] <- 0
+quasiAndD2$downVibrioD2[is.na(quasiAndD2$downVibrioD2)] <- 0
+quasiAndD2$upVibrioQuasi[is.na(quasiAndD2$upVibrioQuasi)] <- 0
+quasiAndD2$downVibrioQuasi[is.na(quasiAndD2$downVibrioQuasi)] <- 0
+diffQuasiDE <- subset(quasiAndD2, (MentholDEQuasi != MentholDED2) | (VibrioDEQuasi != VibrioDED2) | (UpDownVibrioD2 != UpDownVibrioQuasi)| (UpDownMentholD2 != UpDownMentholQuasi))
+sameQuasiDE <- subset(quasiAndD2, (MentholDEQuasi == MentholDED2) & (VibrioDEQuasi == VibrioDED2) & (UpDownVibrioD2 == UpDownVibrioQuasi) & (UpDownMentholD2 == UpDownMentholQuasi))
+write.csv(diffQuasiDE, file="diffQuasiDE.csv")
+write.csv(sameQuasiDE, file="sameQuasiDE.csv")
+```
+
+##Vibrio Comparison, DESeq2 vs Quasi-Poisson
+```{r}
+library("limma")
+vennDiagram(vennCounts(subset(quasiAndD2, select=c(upVibrioD2, upVibrioQuasi, downVibrioD2, downVibrioQuasi))), 
+                       names=c("UpDESeq2", "upQuasi", "downDESeq2", "downQuasi"), circle.col=c("red", "green", "blue", "yellow"))
+title(main="Vibrio")
+```
+
+##Menthol Comparison, DESeq2 vs Quasi-Poisson
+```{r}
+library("limma")
+vennDiagram(vennCounts(subset(quasiAndD2, select=c(upMentholD2, upMentholQuasi, downMentholD2, downMentholQuasi))), 
+                       names=c("UpDESeq2", "upQuasi", "downDESeq2", "downQuasi"), circle.col=c("red", "green", "blue", "yellow"))
+title(main="Menthol")
+```

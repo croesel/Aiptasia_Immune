@@ -1,0 +1,99 @@
+---
+title: "AiptasiaGeneLevelAnalysis"
+author: "Chuck Roesel"
+date: "3/8/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(DESeq2)
+library(GO.db)
+library(dplyr)
+library(tidyr)
+library(gageData)
+library(gage)
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaFigsAndTables.RData")
+load("GeneMappings.RData")
+```
+```{r}
+resVibrio <- results(ddsAllNoAnnot, alpha=.05, name="Vibrio_Vibrio_vs_NoVibrio")
+upVibrioNoAnnot <- subset(resVibrio, padj < .05 & log2FoldChange > 0, select=c("log2FoldChange","padj"))
+upVibrioNoAnnot <- data.frame(upVibrioNoAnnot)
+upVibrioNoAnnot <- merge(upVibrioNoAnnot, diff, by.x=0, by.y="KXJ")
+write.csv(upVibrioNoAnnot, file="upVibrioAnnotDiff.csv")
+```
+
+```{r}
+resVibrio <- results(ddsAll, alpha=.05, name="Vibrio_Vibrio_vs_NoVibrio")
+upVibrio <- subset(resVibrio, padj < .05 & log2FoldChange > 0, select=c("log2FoldChange","padj"))
+upVibrio <- data.frame(upVibrio)
+upVibrio <- merge(upVibrio, koDesc, by.x=0, by.y="KO")
+rownames(upVibrio) <- upVibrio$Row.names
+upVibrio <- subset(upVibrio, select =-c(Row.names))
+upVibrio
+```
+```{perl}
+open (KOGO, ">", "koToGO.tsv") or die $!;
+my $dir = 'ko';
+opendir(my $dh, $dir) || die "Can't open $dir: $!";
+  while (readdir $dh) {
+    my $file = $_;
+    open(FILE, "<", "$dir/$file") or die $!;
+    while(<FILE>){
+      chomp;
+      my $line = $_;
+      if($line =~ /\s+GO:\s+([0-9\s]+)$/){
+        my $goTerms = $1;
+        my @goTermArray = split(/\s/, $goTerms);
+        $file =~ s/ko://;
+        foreach my $goTerm (@goTermArray){
+          print KOGO join("\t", $file, $goTerm), "\n"
+        }
+      }
+    }
+    close(FILE);
+  }
+closedir $dh;
+close(KOGO);
+```
+
+```{r}
+koToGO <- read.table("koToGO.tsv", sep="\t", header=F, stringsAsFactors = F,
+                     colClasses=c('character','character'))
+colnames(koToGO) <- c("KO", "GO")
+koToGO$GO <- paste0("GO:", koToGO$GO)
+head(koToGO)
+```
+```{r}
+go.sets.ko <- list()
+goTerms <- Term(GOTERM)
+goTerms <- data.frame(GO=names(goterms), GO_Desc=goterms, row.names=NULL, stringsAsFactors = F)
+koToGO <- merge(koToGO, goTerms)
+upVibrio <- merge(upVibrio, koToGO, by.x=0, by.y="KO")
+upVibrio
+```
+```{r}
+go.sets.ko <- list()
+for (goTerm in unique(goTerms$GO)){
+  genes <- subset(koToGO, GO == goTerm)$KO
+  if(length(genes) > 0){
+    go.sets.ko[[goTerm]] <- genes
+  }
+}
+```
+```{r}
+gageVibrioDif <- gage(exprs, go.sets.ko, ref=refVibrio, samp=sampVibrio, same.dir=TRUE)
+vibrioLess <- as.data.frame(gageVibrioDif$less)
+vibrioLess <- subset(vibrioLess, q.val < .05, select=c("q.val"))
+```
+```{r}
+vibrioLess <- merge(vibrioLess, goTerms, by.x=0, by.y="GO")
+vibrioLess
+```

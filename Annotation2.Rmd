@@ -1,0 +1,90 @@
+---
+title: "Figures"
+author: "Chuck Roesel"
+date: "3/30/2018"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = F,
+	message = FALSE,
+	warning = FALSE
+)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(pander)
+library(UpSetR)
+library(pathview)
+library(igraph)
+
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaFigsAndTables.RData")
+load("AiptasiaGeneLevelAnalysis.RData")
+```
+
+```{r}
+blastHits <- read.table("kTransSwissProt3.tsv", sep="\t", header=F, quote="")
+```
+```{r}
+blastHits$cov <- blastHits$V4/blastHits$V3
+blastHits <- subset(blastHits, select=c("V1", "V2", "V6", "cov"))
+head(blastHits)
+```
+```{r}
+colnames(blastHits) <- c("KX", "SP", "e", "cov")
+spBlast <- separate(blastHits, SP, c("spPrefix", "sp", "symbol"), sep = "\\|")
+head(spBlast)
+```
+
+```{r}
+spBlast <- separate(spBlast, symbol, c("symbol", "species"), sep = "_")
+spBlast <- subset(spBlast, select=c("KX", "sp", "symbol", "e", "cov"))
+head(spBlast)
+```
+
+```{r}
+uniToKegg <- read.table("uniprot.tsv", header=F, sep="\t", stringsAsFactors = F, quote="")
+head(uniToKegg)
+```
+```{r}
+uniToKegg <- separate(uniToKegg, V1, c("source", "sp"), sep = ":")
+head(uniToKegg)
+```
+
+```{r}
+uniToKegg <- subset(uniToKegg, select=c("sp", "V2"))
+colnames(uniToKegg) <- c("sp", "kegg")
+head(uniToKegg)
+```
+```{r}
+keggToKo <- read.table("keggToKO.tsv", sep="\t", header=F, quote="", stringsAsFactors = F)
+head(keggToKo)
+```
+```{r}
+keggToKo <- separate(keggToKo, V2, c("prefix", "KO"), sep = ":")
+head(keggToKo)
+```
+```{r}
+colnames(keggToKo) <- c("kegg", "prefix", "KO")
+keggToKo <- subset(keggToKo, select=c("kegg", "KO"))
+head(keggToKo)
+```
+```{r}
+spToKo <- merge(uniToKegg, keggToKo)
+head(spToKo)
+write.csv(spToKo, file="spToKo.csv")
+```
+```{r}
+kxToKo <- merge(spBlast, spToKo, by="sp")
+head(kxToKo)
+write.csv(kxToKo, file="kxToKo.csv")
+```
+

@@ -1,0 +1,37 @@
+---
+documentclass: article
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(kableExtra)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+	echo = F,
+	message = FALSE,
+	warning = FALSE,
+	options(knitr.kable.NA = '')
+)
+load("AiptasiaFigsAndTables.RData")
+```
+### Tables and Figures
+
+\clearpage
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+dfDECount <- data.frame("All"=c(4264, 1114, 66), 
+                        "Annotated"=c(1138, 395,12),
+                        "high"=c(427, 123, 11))
+rownames(dfDECount) <- c("Vibrio", "Menthol", "Interaction" )
+colnames(dfDECount) <- c("All", "Annotated", "abs(LFC) > 1")
+kable(dfDECount,format='latex',booktabs=T, format.args = list(big.mark = ","))
+```
+
+```

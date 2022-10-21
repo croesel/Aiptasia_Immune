@@ -1,0 +1,405 @@
+---
+fontsize: 12pt
+mainfont: Lato
+geometry: "left=2.5cm,right=2.5cm,top=3cm,bottom=3cm"
+documentclass: "article"
+header-includes:
+  - \usepackage{indentfirst}
+  - \usepackage[style=apa,backend=biber]{biblatex}
+  - \usepackage{setspace}\doublespacing
+  - \usepackage[left]{lineno}
+  - \newcommand{\beginsupplement}{\setcounter{table}{0}  \renewcommand{\thetable}{S\arabic{table}} \setcounter{figure}{0} \renewcommand{\thefigure}{S\arabic{figure}}}
+output:
+  word_document: default
+  pdf_document:
+    includes:
+      in_header: header.tex 
+    latex_engine: xelatex
+    fig_caption: true
+    keep_tex: true
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+bibliography: Aiptasia.bib
+csl: molecular-ecology.csl
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+library(knitr)
+library(UpSetR)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(kableExtra)
+library(goseq)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+	echo = F,
+	message = FALSE,
+	warning = FALSE,
+	options(knitr.kable.NA = '')
+)
+load("AiptasiaFigsAndTables.RData")
+```
+### Tables and Figures
+
+\singlespacing
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+caption <- "Multivariate PERMANOVA analyses show significant differences in transcriptome-wide gene expression patterns due to \\emph{Vibrio} (p = 0.001) and menthol exposure (p = 0.007), but not the \\emph{Vibrio}-menthol interaction. \\emph{Vibrio} explained 19.9\\% of the variation and menthol explained 9.8\\% of the variation."
+print(kable(permanovaTab, caption=caption, booktab=T, digits=3))
+```
+\clearpage
+```{r}
+summaryTables <- function(LFC){
+inFile <- "rawenrichedAndDE.csv"
+enrichedAndDE <- read.csv(inFile, row.names = 1)
+enrichedAndDE$ID <- trimws(enrichedAndDE$ID,which = c("both"))
+enrichedAndDE$Pathway <- gsub(' pathway', '', enrichedAndDE$Pathway)
+enrichedAndDE <- subset(enrichedAndDE, Pathway %in% pathCategories2$PathDesc,
+                        select=c("ID", "Pathway","Vibrio", "Menthol","pV", "pM",
+                                                  "Category"
+  ))
+dfBestAllAnnotPathFilt <- subset(dfBestAllAnnotPathFilt, PathDesc %in% enrichedAndDE$Pathway)
+write.csv(dfBestAllAnnotPathFilt, file=paste0("dfBestAllAnnotPathFilt",LFC, '.csv'))
+deVibrio <- subset(dfBestAllAnnotPathFilt, VibrioPadj < .05 & abs(VibrioLFC) > LFC)
+deMenthol <- subset(dfBestAllAnnotPathFilt, MentholPadj < .05 & abs(MentholLFC) > LFC)
+deVibrioOnly <- setDT(deVibrio)[!deMenthol, on="Gene"]
+deMentholOnly <- setDT(deMenthol)[!deVibrio, on="Gene"]
+deBoth <- merge(deVibrio, deMenthol)
+deEither <- subset(dfBestAllAnnotPathFilt, (VibrioPadj < .05 & abs(VibrioLFC) > LFC) | 
+                     (MentholPadj < .05 & abs(MentholLFC) > LFC),select=c("Path", "Gene"))
+upVibrio <- subset(deVibrioOnly, VibrioLFC > LFC,
+                   select=c("Path", "Gene"))
+downVibrio <- subset(deVibrioOnly, VibrioLFC < -LFC, 
+                     select=c("Path", "Gene"))
+upMenthol <- subset(deMentholOnly, MentholLFC > LFC,
+                    select=c("Path", "Gene"))
+downMenthol <- subset(deMentholOnly, MentholLFC < -LFC, 
+                      select=c("Path", "Gene"))
+upBoth <- subset(deBoth, MentholLFC > 0 & VibrioLFC >LFC, 
+                      select=c("Path", "Gene"))
+downBoth <- subset(deBoth, MentholLFC < 0 & VibrioLFC < -LFC, 
+                      select=c("Path", "Gene"))
+upVDownM <- subset(deBoth, MentholLFC < 0 & VibrioLFC > LFC, 
+                      select=c("Path", "Gene"))
+downVUpM <- subset(deBoth, MentholLFC > 0 & VibrioLFC < -LFC, 
+                      select=c("Path", "Gene"))
+countUpVibrio <- aggregate(Gene ~ Path, data = upVibrio, FUN = NROW)
+colnames(countUpVibrio) <- c("Path", "V+")
+countDownVibrio <- aggregate(Gene ~ Path, data = downVibrio, FUN = NROW)
+colnames(countDownVibrio) <- c("Path", "V-")
+countUpMenthol <- aggregate(Gene ~ Path, data = upMenthol, FUN = NROW)
+colnames(countUpMenthol) <- c("Path", "M+")
+countDownMenthol <- aggregate(Gene ~ Path, data = downMenthol, FUN = NROW)
+colnames(countDownMenthol) <- c("Path", "M-")
+countDeEither <- aggregate(Gene ~ Path, data = deEither, FUN = NROW)
+colnames(countDeEither) <- c("Path", "DE")
+countAll <- aggregate(Gene ~ Path, data = dfBestAllAnnotPath, FUN = NROW)
+colnames(countAll) <- c("Path", "Total")
+countUpBoth <- aggregate(Gene ~ Path, data = upBoth, FUN = NROW)
+colnames(countUpBoth) <- c("Path", "V+M+")
+countDownBoth <- aggregate(Gene ~ Path, data = downBoth, FUN = NROW)
+colnames(countDownBoth) <- c("Path", "V-M-")
+countSummary <- merge(countAll, countUpVibrio, by="Path", all=T)
+countSummary <- merge(countSummary, countDownVibrio, by="Path", all=T)
+countSummary <- merge(countSummary, countUpMenthol, by="Path", all=T)
+countSummary <- merge(countSummary, countDownMenthol, by="Path", all=T)
+countSummary <- merge(countSummary, countDeEither, by="Path", all=T)
+countSummary <- merge(countSummary, countUpBoth, by="Path", all=T)
+countSummary <- merge(countSummary, countDownBoth, by="Path", all=T)
+deCount <- 7
+if (NROW(downVUpM) > 0L){
+  countDownVUpM <- aggregate(Gene ~ Path, data = downVUpM, FUN = NROW)
+  colnames(countDownVUpM) <- c("Path", "V-M+")
+  write.csv(countDownVUpM, file=paste0("countDownVUpM",LFC, '.csv'))
+  countSummary <- merge(countSummary, countDownVUpM, by="Path", all=T)
+  deCount <- deCount+1
+}
+if(NROW(upVDownM) > 0L){
+  countUpVDownM <- aggregate(Gene ~ Path, data = upVDownM, FUN = NROW)
+  colnames(countUpVDownM) <- c("Path", "V+M-")
+  countSummary <- merge(countSummary, countUpVDownM, by="Path", all=T)
+  deCount <- deCount+1
+}
+countSummary$PctDE <- 100*countSummary$DE/countSummary$Total
+rownames(countSummary) <-countSummary$Path
+countSummary <- subset(countSummary, select=-c(Path))
+countSummary[is.na(countSummary)] <- 0
+enrichedAndDE <- merge(enrichedAndDE, countSummary, by=0)
+rownames(enrichedAndDE) <- enrichedAndDE$Row.names
+enrichedAndDE <- subset(enrichedAndDE, select=-c(Row.names, PctDE))
+enrichedAndDE <- unite(enrichedAndDE, "DE", c("DE","Total"), sep="/")
+enrichedAndDE$uVT <- rowSums(enrichedAndDE[, grep("V\\+", names(enrichedAndDE))])
+enrichedAndDE$dVT <- rowSums(enrichedAndDE[, grep("V\\-", names(enrichedAndDE))])
+enrichedAndDE$uMT <- rowSums(enrichedAndDE[, grep("M\\+", names(enrichedAndDE))])
+enrichedAndDE$dMT <- rowSums(enrichedAndDE[, grep("M\\-", names(enrichedAndDE))])
+enrichedAndDE$dirV <- enrichedAndDE$uVT - enrichedAndDE$dVT
+enrichedAndDE$dirM <- enrichedAndDE$uMT - enrichedAndDE$dMT
+enrichedAndDE$Path <- gsub(' pathway', '', enrichedAndDE$Path)
+dfBestAllAnnotPath <- read.csv("dfBestAllAnnotPath.csv", row.names = 1, stringsAsFactors = F)
+deEither <- subset(dfBestAllAnnotPath, VibrioPadj < alpha |MentholPadj < alpha)
+deEitherAndCategory <- merge(deEither, pathCategories2)
+deCountByCategory <- aggregate(symbol ~ Category, data=deEitherAndCategory, FUN=NROW)
+deCountByCategory <- deCountByCategory[order(deCountByCategory$symbol, decreasing=T),]
+colnames(deCountByCategory) <- c("Category","CatDE")
+enrichedAndDE <- merge(enrichedAndDE, deCountByCategory)
+enrichedAndDE <- arrange(enrichedAndDE,desc(CatDE),desc(dirV),desc(dirM))
+enrichedAndDE$V <- ''
+enrichedAndDE$V[enrichedAndDE$pV <= .05] <- '*'
+enrichedAndDE$V[enrichedAndDE$pV <= .01] <- '**'
+enrichedAndDE$V[enrichedAndDE$pV <= .005] <- '***'
+enrichedAndDE$M <- ''
+enrichedAndDE$M[enrichedAndDE$pM <= .05] <- '*'
+enrichedAndDE$M[enrichedAndDE$pM <= .01] <- '**'
+enrichedAndDE$M[enrichedAndDE$pM <= .005] <- '***'
+enrichedAndDE$dirV2 <- 'ns'
+enrichedAndDE$dirV2[(enrichedAndDE$dirV > 2 & enrichedAndDE$pV <= .05)] <- 'up'
+enrichedAndDE$dirV2[(enrichedAndDE$dirV < -2 & enrichedAndDE$pV <= .05)] <- 'down'
+enrichedAndDE$dirV2[(abs(enrichedAndDE$dirV) <= 2 & enrichedAndDE$pV <= .05)] <- 'mixed'
+enrichedAndDE$dirM2 <- 'ns'
+enrichedAndDE$dirM2[(enrichedAndDE$dirM > 2 & enrichedAndDE$pM <= .05)] <- 'up'
+enrichedAndDE$dirM2[(enrichedAndDE$dirM < -2 & enrichedAndDE$pM <= .05)] <- 'down'
+enrichedAndDE$dirM2[(abs(enrichedAndDE$dirM) <= 2 & enrichedAndDE$pM <= .05)] <- 'mixed'
+rownames(enrichedAndDE) <- enrichedAndDE$ID
+barPlotTable <- enrichedAndDE
+barPlotTable <- merge(barPlotTable, pathCategories2, by=0)
+rownames(barPlotTable) <- barPlotTable$ID
+barPlotTable <- subset(barPlotTable, select=-c(Row.names, Category.x, Path.x, Path.y))
+names(barPlotTable)[names(barPlotTable) == 'Category.y'] <- 'Category'
+barPlotTable$Vibrio <- ''
+barPlotTable$Vibrio[barPlotTable$pV <= .05] <- 'V'
+#barPlotTable$Vibrio[(barPlotTable$dirV < -2 & barPlotTable$pV <= .05)] <- 'V-'
+barPlotTable$Menthol <- ''
+barPlotTable$Menthol[barPlotTable$pM <= .05] <- 'M'
+#barPlotTable$Menthol[(barPlotTable$dirM < -2 & barPlotTable$pM <= .05)] <- 'M-'
+barPlotTable$Category <- as.character(barPlotTable$Category)
+barPlotTable <- unite(barPlotTable, Group, Vibrio,Menthol, sep = "", remove = T)
+  
+barPlotTable$Count <- 1
+barPlotTable$Group[barPlotTable$Group == ''] <- 'Mixed'
+write.csv(barPlotTable, file="barPlotTable.csv")
+
+dfBestAllAnnotPathSel <- merge(barPlotTable, dfBestAllAnnotPath, by.x="ID", by.y="Path")
+dfBestAllAnnotPathSel$V <- ''
+dfBestAllAnnotPathSel$M <- ''
+dfBestAllAnnotPathSel$Count <- 1
+dfBestAllAnnotPathSel$V[(dfBestAllAnnotPathSel$VibrioPadj < .05 & dfBestAllAnnotPathSel$VibrioLFC > LFC)] <- 'V+'
+dfBestAllAnnotPathSel$V[(dfBestAllAnnotPathSel$VibrioPadj < .05 & dfBestAllAnnotPathSel$VibrioLFC < -LFC)] <- 'V-'
+dfBestAllAnnotPathSel$M[(dfBestAllAnnotPathSel$MentholPadj < .05 & dfBestAllAnnotPathSel$MentholLFC > LFC)] <- 'M+'
+dfBestAllAnnotPathSel$M[(dfBestAllAnnotPathSel$MentholPadj < .05 & dfBestAllAnnotPathSel$MentholLFC < -LFC)] <- 'M-'
+dfRank <- data.frame(Group=c("V+M+",  "V+", "V-", "V-M-","M+", "M-", "V+M-", "V-M+"), Rank=c(1, 2, 3, 4, 5, 6, 7, 8))
+
+dfBestAllAnnotPathSel$Group <- paste0(dfBestAllAnnotPathSel$V, dfBestAllAnnotPathSel$M)
+dfBestAllAnnotPathSel <- merge(dfBestAllAnnotPathSel, dfRank)
+dfBestAllAnnotPathSel <- subset(dfBestAllAnnotPathSel, select=c("Rank", "Group", "Gene", "symbol","GeneDesc", "ID",
+                                                                "PathDesc.x","Category", "cov", "evalue", "KX", "VibrioLFC", "MentholLFC", "VibrioPadj", "MentholPadj"))
+names(dfBestAllAnnotPathSel)[names(dfBestAllAnnotPathSel) == 'PathDesc.x'] <- 'PathDesc'
+pathCounts <- aggregate(ID ~ Gene, data=dfBestAllAnnotPathSel, FUN=NROW)
+pathCounts$Shared[(pathCounts$ID > 1)] <- 1
+pathCounts$Unique[(pathCounts$ID == 1)] <- 1
+pathCounts <- subset(pathCounts, select=-c(ID))
+pathCounts2 <- merge(pathCounts, dfBestAllAnnotPathSel)
+pathCountsS <- aggregate(Shared ~ PathDesc,data=pathCounts2, FUN=sum)
+pathCountsU <- aggregate(Unique ~ PathDesc,data=pathCounts2, FUN=sum)
+pathCounts2 <- merge(pathCountsS, pathCountsU, all=T)
+pathCounts2 <- subset(pathCounts2, Unique > 1)
+barPlotTableUnique <- subset(barPlotTable, Pathway %in% pathCounts2$PathDesc)
+barPlotTable2 <- aggregate(Count ~ Group+Category, data = barPlotTableUnique, FUN = sum)
+barPlotTable2 <- arrange(barPlotTable2, -Count)
+groupTotals <- aggregate(Count ~ Group, data = barPlotTableUnique, FUN = sum)
+colnames(groupTotals) <- c("Group", "GroupCount")
+barPlotTable2 <- merge(barPlotTable2, groupTotals)
+
+dfBestAllAnnotPathSel <- subset(dfBestAllAnnotPathSel, PathDesc %in% pathCounts2$PathDesc)
+dfBestAllAnnotPathSel <- arrange(dfBestAllAnnotPathSel,PathDesc)
+sharedGenePathList <- aggregate( PathDesc ~ Gene, dfBestAllAnnotPathSel, function(x) toString(unique(x)))
+sharedGenePathSel <- unique(subset(dfBestAllAnnotPathSel, select=c("Rank", "Group", "Gene", "symbol","GeneDesc", 
+                                                            "Category", "cov", "evalue", "KX")))
+write.csv(pathCounts2, file="debug.csv")
+write.csv(dfBestAllAnnotPathSel, file="debug2.csv")
+dfBestAllAnnotPathSel <- arrange(dfBestAllAnnotPathSel,Category)
+sharedGeneCatList <- aggregate( Category ~ Gene, dfBestAllAnnotPathSel, function(x) toString(unique(x)))
+sharedGenePathSel <- unique(subset(dfBestAllAnnotPathSel, select=c("Rank", "Group", "Gene", "symbol","GeneDesc", "cov", "evalue", "KX", "VibrioLFC", "MentholLFC")))
+sharedGenePathSel <- merge(sharedGenePathList, sharedGenePathSel)
+sharedGenePathSel <- merge(sharedGenePathSel, sharedGeneCatList)
+rownames(sharedGenePathSel) <- sharedGenePathSel$Gene
+sharedGenePathSel <- arrange(sharedGenePathSel,Rank,Category, PathDesc)
+sharedGenePathSel <- subset(sharedGenePathSel, select=c("Rank","Group","Gene","symbol", "GeneDesc", "VibrioLFC","MentholLFC","Category","PathDesc"))
+sharedGenePathSel <- arrange(sharedGenePathSel,Rank,Category,PathDesc)
+sharedGenePathSel <- unite(sharedGenePathSel, "Symbol/Description",c(symbol, GeneDesc), sep = " ", remove = TRUE)
+pathCounts2[is.na(pathCounts2)] <- 0
+barPlotTable3 <- merge(barPlotTable, pathCounts2)
+barPlotTable3$Rank[(barPlotTable3$Category == 'Immune system')] <- 1
+barPlotTable3$Rank[(barPlotTable3$Category == 'Cell growth and death')] <- 3
+barPlotTable3$Rank[(barPlotTable3$Category == 'Transport and catabolism')] <- 2
+barPlotTable3$Rank[(barPlotTable3$Category == 'Signaling molecules and interaction')] <- 4
+barPlotTable3$eV[(barPlotTable3$V != '')] <- 1
+barPlotTable3$eV[(barPlotTable3$V == '')] <- 2
+barPlotTable3$eM[(barPlotTable3$M != '')] <- 1
+barPlotTable3$eM[(barPlotTable3$M == '')] <- 2
+barPlotTable3 <- merge(barPlotTable3, KEGGMV)
+barPlotTable3 <- arrange(barPlotTable3,Rank,desc(oeV),desc(oeM) ,eV, eM)
+columnSelect <-c("ID", "Pathway", "V", "M", "oeV", "oeM", "DE") 
+deColumns <- grep("\\+|\\-", colnames(barPlotTable3), value=T)
+columnSelect <- c(columnSelect, deColumns)
+colRename <- gsub('oe','', columnSelect)
+colRename <- gsub('DE','DE/Total', colRename)
+#colRename <- tolower(colRename)
+barPlotTable4 <- subset(barPlotTable3, select=columnSelect)
+caption <- "Differential gene expression summary of enriched (ESGEA) and overrepresented (GOseq) pathways, counts of DE genes (DESeq2) and total annotated genes within each pathway, and DE gene counts by direction and treatment group (DE for \\emph{Vibrio}-only up (V+) or down (V-), Menthol-only up (M+) or down (M-), Both (V+M+, V-M-, V+M-). Counts for V-M+ were all zero, so the V-M+ column was excluded. Enrichment FDR-adjusted p-values: .05 *, .01 **, .005 ***."
+caption2 <- "Test"
+kableIn <- kable(barPlotTable4, 
+                 caption=caption, digits=3, 
+                 format="latex", booktabs=T, longtable=F, row.names = F, col.names = colRename, align="l") %>% 
+  kable_styling(latex_options=c("striped", "repeat_header"), font_size=9, full_width = F) %>% 
+  add_header_above(c("Pathway" = 2, "Enriched" = 2,"Overrepresented" = 2, "Differential Expression" = deCount), 
+                   align="l")%>% column_spec(2, width = "7em")
+#Loop through all categories and insert a header for each category
+write.csv(barPlotTable4, file=paste0("barPlotTable4", LFC, '.csv'))
+for(category in unique(barPlotTable$Category)){
+  startRow <- min(grep(category, barPlotTable3$Category))
+  endRow <- max(grep(category, barPlotTable3$Category))
+  #Pass in the latex table and add one category header.
+  if(startRow > 0 & endRow > 0){
+  kableIn <- group_rows(kableIn, category, startRow, 
+                        endRow, hline_before = T,
+                        latex_gap_space = "0.3em")
+  }
+}
+sharedGenePathSel2 <- subset(sharedGenePathSel, select=-c(Rank))
+sharedGenePathSel2$PathDesc <- gsub(' signaling', '', sharedGenePathSel2$PathDesc)
+sharedGenePathSel2$PathDesc <- gsub(' and coagulation cascades', '', sharedGenePathSel2$PathDesc)
+sharedGenePathSel2$PathDesc <- gsub(' and presentation', '', sharedGenePathSel2$PathDesc)
+sharedGenePathSel2$PathDesc <- gsub('-like receptor', '', sharedGenePathSel2$PathDesc)
+
+return(list("kableIn"=kableIn, "sharedGenePathSel2"=sharedGenePathSel2 , "dfBestAllAnnotPathSel"=dfBestAllAnnotPathSel,
+            "dfRank"=dfRank, "barPlotTable2" = barPlotTable2, "barPlotTable" = barPlotTable))
+}
+```
+
+
+
+```{r enrichDeSummaryUnfiltered, results='asis', dev=c('pdf', 'svg')}
+LFC <- 0
+latexTablesLFC0 <- summaryTables(LFC)
+LFC <- 1
+latexTablesLFC1 <- summaryTables(LFC)
+#print(landscape(latexTablesLFC0$kableIn))
+print(latexTablesLFC0$kableIn)
+```
+
+\clearpage
+
+```{r kableHeatMap, results='asis'}
+heatMapByCategory <- function(category, caption){
+breaks <- c(-2,-1, 0, 1,2)
+colorPal <- colorRampPalette(c("blue","white","red"))(6)
+dfHeatmap <- subset(latexTablesLFC1$dfBestAllAnnotPathSel, Category %in% c(category))
+dfHeatmap3 <- subset(dfHeatmap, select=c("Category","PathDesc", "Rank", "Gene", "symbol", "GeneDesc", "Group", "VibrioLFC", "MentholLFC", "VibrioPadj", "MentholPadj"))
+write.csv(dfHeatmap, file="dfHeatmap.csv")
+CatCount <- aggregate(Gene ~ Category, data=dfHeatmap3, FUN=length)
+colnames(CatCount) <- c("Category", "CategoryCount")
+PathCount <- aggregate(Gene ~ PathDesc, data=dfHeatmap3, FUN=length)
+colnames(PathCount) <- c("PathDesc", "PathCount")
+dfHeatmap3 <- merge(dfHeatmap3, CatCount)
+dfHeatmap3 <- merge(dfHeatmap3, PathCount)
+# Manual category adjustments to separate Coagulation
+dfHeatmap3$Subpath[dfHeatmap3$symbol %in% c("A2MG", "TFPI1", "VWF", "F13B")] <- "Coagulation"
+dfHeatmap3$Subpath[dfHeatmap3$symbol %in% c("DAF", "CFAH", "CO3", "MCP", "CFAB", "PAI2")] <- "Complement"
+# End of manual category adjustments
+dfHeatmap3 <- arrange(dfHeatmap3,desc(CategoryCount),desc(PathCount), Subpath, PathDesc, Rank, desc(VibrioLFC))
+dfHeatmap3$colorV<-'white'
+#dfHeatmap3$colorV[dfHeatmap3$VibrioLFC < 0  & dfHeatmap3$VibrioPadj < .05]<-colorPal[3]
+dfHeatmap3$colorV[dfHeatmap3$VibrioLFC < -1 & dfHeatmap3$VibrioPadj < .05]<-colorPal[2]
+dfHeatmap3$colorV[dfHeatmap3$VibrioLFC < -2 & dfHeatmap3$VibrioPadj < .05]<-colorPal[1]
+#dfHeatmap3$colorV[dfHeatmap3$VibrioLFC > 0 & dfHeatmap3$VibrioPadj < .05]<-colorPal[4]
+dfHeatmap3$colorV[dfHeatmap3$VibrioLFC > 1 & dfHeatmap3$VibrioPadj < .05]<-colorPal[5]
+dfHeatmap3$colorV[dfHeatmap3$VibrioLFC > 2 & dfHeatmap3$VibrioPadj < .05]<-colorPal[6]
+dfHeatmap3$Vibrio <- round(dfHeatmap3$VibrioLFC, digits=2)
+dfHeatmap3 <- dfHeatmap3 %>%
+mutate(Vibrio = cell_spec(
+Vibrio, "latex", color = "white", bold = T,
+background = dfHeatmap3$colorV
+))
+dfHeatmap3$colorM<-'white'
+#dfHeatmap3$colorM[dfHeatmap3$MentholLFC < -0 & dfHeatmap3$MentholPadj < .05]<-colorPal[3]
+dfHeatmap3$colorM[dfHeatmap3$MentholLFC < -1 & dfHeatmap3$MentholPadj < .05]<-colorPal[2]
+dfHeatmap3$colorM[dfHeatmap3$MentholLFC < -2 & dfHeatmap3$MentholPadj < .05]<-colorPal[1]
+#dfHeatmap3$colorM[dfHeatmap3$MentholLFC > 0 & dfHeatmap3$MentholPadj < .05]<-colorPal[4]
+dfHeatmap3$colorM[dfHeatmap3$MentholLFC > 1 & dfHeatmap3$MentholPadj < .05]<-colorPal[5]
+dfHeatmap3$colorM[dfHeatmap3$MentholLFC > 2 & dfHeatmap3$MentholPadj < .05]<-colorPal[6]
+dfHeatmap3$Menthol <- round(dfHeatmap3$MentholLFC, digits=2)
+dfHeatmap3 <- subset(dfHeatmap3, select=-c(MentholPadj, VibrioPadj))
+dfHeatmap3 <- dfHeatmap3 %>%
+mutate(Menthol = cell_spec(
+Menthol, "latex", color = "white", bold = T,
+background = dfHeatmap3$colorM
+))
+#dfHeatmap3$Subpath[is.na(dfHeatmap3$Subpath)] <- ""
+dfHeatmap3 <- transform(dfHeatmap3, GeneDesc = ifelse(!is.na(dfHeatmap3$Subpath), paste0(dfHeatmap3$GeneDesc," (" ,dfHeatmap3$Subpath, ")"), GeneDesc))
+#dfHeatmap3$GeneDesc[!is.na(dfHeatmap3$Subpath)] <- paste0(dfHeatmap3$GeneDesc," (" ,dfHeatmap3$Subpath, ")")
+dfHeatmap3 <- unique(subset(dfHeatmap3, select=-c(colorV, colorM, VibrioLFC, MentholLFC, Subpath)))
+dfHeatmap4 <- subset(dfHeatmap3, select=-c(Category,Rank, CategoryCount, PathCount, PathDesc))
+#rownames(dfHeatmap4) <- dfHeatmap4$Gene
+#dfHeatmap4 <- subset(dfHeatmap4, select=-c(Gene))
+write.csv(dfHeatmap4, file="dfHeatmap4.csv")
+write.csv(dfHeatmap3, file="dfHeatmap3.csv")
+colHdr <- c("Gene","Symbol", "Pathway", "Group", "\\emph{Vibrio}", "Menthol")
+kableIn <- kable(dfHeatmap4, col.names = colHdr, caption=caption,booktab=T, format='latex', escape=F, longtable=F, digits=2, row.names=T) %>% kable_styling(latex_options=c(),font_size=9, full_width = F) %>%  column_spec(1, color = "white")%>%  column_spec(4, width = "30em")%>% column_spec(6, width = "3em")%>% column_spec(7, width = "3em")
+#for(category in unique(dfHeatmap3$Category)){
+#  startRow <- min(grep(category, dfHeatmap3$Category))
+#  endRow <- max(grep(category, dfHeatmap3$Category))
+#  #Pass in the latex table and add one category header.
+#  if(startRow > 0 & endRow > 0){
+#  kableIn <- group_rows(kableIn, category, startRow, 
+#                        endRow, hline_after = T,
+#                        latex_gap_space = "0.0em")
+#  }
+#}
+for(path in unique(dfHeatmap3$PathDesc)){
+  startRow <- min(grep(path, dfHeatmap3$PathDesc))
+  endRow <- max(grep(path, dfHeatmap3$PathDesc))
+  #Pass in the latex table and add one category header.
+  if(startRow > 0 & endRow > 0){
+  kableIn <- group_rows(kableIn, path, startRow, 
+                        endRow, hline_after = F,
+                        latex_gap_space = "0.0em")
+  }
+}
+
+print(kableIn)
+write.csv(dfHeatmap3, file=paste0(category, '.csv'))
+}
+caption <- "Highly DE Immune genes by KEGG category and pathway. Within pathways genes are grouped into up-regulated \\emph{Vibrio} and menthol (V+M+), up-regulated \\emph{Vibrio}-only (V+), down-regulated \\emph{Vibrio} and menthol (V-M-), down-regulated \\emph{Vibrio}-only (V-), down-regulated menthol-only (M-). The \\emph{Vibrio} and Menthol columns show log\\textsubscript{2} fold change."
+category <- "Immune system"
+heatMapByCategory(category, caption)
+```
+\clearpage
+```{r kableHeatMapTransport, results='asis'}
+caption <- "Highly DE Transport and Catabolism Genes"
+category <- "Transport and catabolism"
+heatMapByCategory(category, caption)
+```
+\clearpage
+```{r kableHeatMapApop, results='asis'}
+caption <- "Highly DE Cell Growth and Death Genes"
+category <- "Cell growth and death"
+heatMapByCategory(category, caption)
+```
+
+
+\beginsupplement
+\clearpage
+
+```{r}
+dfAlignSumm2 <- dfAlignSumm
+dfAlignSumm2$Sum.Sq <- format(dfAlignSumm2$Sum.Sq, digits = 3)
+dfAlignSumm2$Mean.Sq <- format(dfAlignSumm2$Mean.Sq, digits = 3)
+kable(dfAlignSumm2, digits=3 ,caption="Two-way ANOVA of read alignments. The number of mapped RNA seq reads per anemone averaged 7,681,952 read pairs (+- 671,717 SE) with no significant mapping differences due to either the menthol or \\emph{Vibrio} treatment.", booktab=TRUE)
+```

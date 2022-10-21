@@ -1,0 +1,1722 @@
+---
+title: "Univariate microbial abundance analysis"
+author: "Tarik C. Gouhier"
+date: "09/16/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(gplots)
+library(VennDiagram)
+source("my_venn.R")
+```
+
+```{r echo=FALSE}
+# Load all data
+load("univariate_updown_data.RData")
+load("univariate_glm_metagenomeSeq_quasipoisson.RData")
+```
+
+# T0 
+
+## Venn diagram
+
+Depict the number of OTUs that are significantly more abundant for each combination
+of factors. Note that the interaction between genotype and antibiotics was added
+as a fake factor. Here, areas of overlap between genotype and antibiotics mean
+both factors are significant. The areas of overlap between the factors and the
+interaction depicts OTUs that show significant statistical interactions.
+
+```{r echo=FALSE,fig.width=5,fig.height=5}
+alpha <- 0.05
+delta <- 1
+sig_antibiotic <- df_T0[df_T0$pval.antibiotic.fdr <= alpha, "OTUname"]
+sig_genotype <- df_T0[df_T0$pval.genotype.fdr <= alpha, "OTUname"]
+sig_genotype_antibiotic_inter <- df_T0[  df_T0$pval.interaction.fdr <= alpha, "OTUname"]
+par(plotconf)
+venn(list(Antibiotic = sig_antibiotic, Genotype = sig_genotype, Interaction = sig_genotype_antibiotic_inter))
+# grid.newpage()
+# grid.draw(VennDiagram::venn.diagram(list(Genotype = sig_genotype,
+#                                          Antibiotic = sig_antibiotic,
+#                                          Interaction = sig_genotype_antibiotic_inter), NULL,             
+#                                     category = c("Genotype", "Antibiotics", "Interaction"),
+#                                     fill = c(cb["blue"], cb["red"], cb["green"]),
+#                                     lty = 1,
+#                                     cex = 1,
+#                                     cat.cex = 1,
+#                                     main.fontfamily = "arial", 
+#                                     sub.fontfamily = "arial",
+#                                     cat.col = c(cb["blue"], cb["red"], cb["green"])))
+```
+
+The majority of OTUs are significant for both
+antibiotics and genotype, with only 10 OTUs being significant for antibiotics alone
+and 66 OTUs being significant for genotype alone. This means that there are large
+differences in OTU abundance between coral genotypes and that the antibiotic 
+treatment is not sufficient to eliminate these differences. The number of interactions 
+is really small suggesting that the effects of antibiotics are relatively consistent 
+across coral genotypes. Overall, this means that the antibiotic effect is weaker than
+expected as it is unable to nullify initial differences in microbial community structure
+between hosts. This can also be visualized using a simple barplot:
+
+```{r echo=FALSE,fig.width=4,fig.height=4}
+l <- list(Genotype = sig_genotype, Antibiotic = sig_antibiotic, Interaction = sig_genotype_antibiotic_inter)
+elements <- lapply(l, length)
+names <- names(elements)
+par(plotconf)
+par(mar = c(3, 5, 2, 1))
+bp <- barplot(rev(as.numeric(elements)), names = rev(c("Genotype", "Antibiotics", "Interaction")), horiz = TRUE,
+              xaxs = "i", xlim = c(0, 800), xlab = "Number of signifificant OTUs")
+axis(2, at = bp, lab = NA)
+mbox(aty = bp)
+```
+
+We miss the intersections (i.e., how many OTUs are significant for both factors) 
+but I don't know that we really need them.
+
+## Boxplots
+
+Families with 5 or more OTUs that are significantly up vs. down regulated in +Antibiotic vs. -Antibiotic
+treatments. Upregulation means that OTU abundance is greater with than without antibiotics:
+
+```{r echo=FALSE,fig.width=10,fig.height=8}
+sig_OTUs <- df_T0[df_T0$pval.antibiotic.fdr <= alpha, "OTUname"]
+sig_T0_family <- aggregate(pval.antibiotic.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T0)
+colnames(sig_T0_family)[ncol(sig_T0_family)] <- "signif"
+updown_T0_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t0_long, 
+                                            antibiotic == "MinusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_MinusA)[ncol(updown_T0_MinusA)] <- "abund.MinusA"
+updown_T0_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t0_long, 
+                                           antibiotic == "PlusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_PlusA)[ncol(updown_T0_PlusA)] <- "abund.PlusA"
+merged_updown_T0 <- merge(updown_T0_MinusA, updown_T0_PlusA)
+merged_updown_T0$logRatio <- log2((merged_updown_T0$abund.PlusA + delta) / (merged_updown_T0$abund.MinusA + delta))
+up_T0_family <- aggregate(logRatio ~ family, data = merged_updown_T0, FUN = function(x) sum(x > 0))
+colnames(up_T0_family)[ncol(up_T0_family)] <- "antibiotic.up"
+down_T0_family <- aggregate(logRatio ~ family, data = merged_updown_T0, FUN = function(x) sum(x < 0))
+colnames(down_T0_family)[ncol(down_T0_family)] <- "antibiotic.down"
+
+merged_sig_updown_T0_family <- merge(down_T0_family, up_T0_family, all = TRUE)
+merged_sig_updown_T0_family <- merge(sig_T0_family, merged_sig_updown_T0_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 5 
+merged_sig_updown_T0_family <- merged_sig_updown_T0_family[merged_sig_updown_T0_family[, "signif"] > cutoff, ]
+
+updown_T0_mean <- aggregate(logRatio ~ family, data = merged_updown_T0, FUN = mean, na.rm = TRUE)
+merged_updown_T0 <- merge(merged_updown_T0, merged_sig_updown_T0_family)
+par(plotconf)
+par(mar = c(3, 10, 2, 1))
+par(mfrow = c(1, 3))
+# Panel 1
+max <- max(merged_updown_T0$logRatio + 2)
+bp <- boxplot(logRatio ~ family, data = merged_updown_T0, ylab = "", 
+              xlab = expression(paste(log[2], "(+AB/-AB)")), 
+              ylim = c(-8, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Fold change", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T0$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+# Panel 2
+max <- max(log(merged_updown_T0$abund.PlusA + delta)) + 2
+bp <- boxplot(log(abund.PlusA + delta) ~ family, data = merged_updown_T0, ylab = "", 
+              xlab = expression(paste("Abundance (", log[2], ")")),
+              ylim = c(0, max), cex.axis = 1, cex.lab = 1,
+              outline = FALSE, horizontal = TRUE,
+              main = "+ Antibiotics", col = cb["red"], 
+              xlim = rev(c(1, length(unique(merged_updown_T0$family)))))
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# Panel 3
+max <- max(log(merged_updown_T0$abund.MinusA + delta)) + 2
+bp <- boxplot(log(abund.MinusA + delta) ~ family, data = merged_updown_T0, ylab = "", 
+              xlab = expression(paste("Abundance (", log[2], ")")),
+              ylim = c(0, max), cex.axis = 1, cex.lab = 1,
+              outline = FALSE, horizontal = TRUE,
+              main = "- Antibiotics", col = cb["blue"], 
+              xlim = rev(c(1, length(unique(merged_updown_T0$family)))))
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+```
+
+# T2
+
+## Venn diagram
+
+This is for the main effects only (i.e., these are the OTUs that are significant
+for main effects only but no two-, three- or four-way interaction). Here, 
+the areas of overlap mean that the main effects of multiple factors are significant.
+
+```{r echo=FALSE,fig.width=6,fig.height=6}
+alpha <- 0.05
+delta <- 1
+# Main effects only (exclude interactions)
+sig_antibiotic <- df_T2[df_T2$pval.antibiotic.fdr <= alpha &
+                          rowSums(df_T2[, 26:36] <= alpha) == 0, "OTUname"]
+sig_genotype <- df_T2[df_T2$pval.genotype.fdr <= alpha  &
+                        rowSums(df_T2[, 26:36] <= alpha) == 0, "OTUname"]
+sig_exp1 <- df_T2[df_T2$pval.exposure_one <= alpha  &
+                    rowSums(df_T2[, 26:36] <= alpha) == 0, "OTUname"]
+sig_exp2 <- df_T2[df_T2$pval.exposure_two <= alpha  &
+                    rowSums(df_T2[, 26:36] <= alpha) == 0, "OTUname"]
+
+grid.draw(VennDiagram::venn.diagram(list(Genotype = sig_genotype,
+                                         Antibiotic = sig_antibiotic,
+                                         Exp1 = sig_exp1, Exp2 = sig_exp2), NULL,             
+                                    category = c("Genotype", "Antibiotics", "Exposure 1", "Exposure 2"),
+                                    fill = c(cb["blue"], cb["red"], cb["green"], cb["grey"]),
+                                    lty = 1,
+                                    cex = 1,
+                                    cat.cex = 1,
+                                    main.fontfamily = "arial", 
+                                    sub.fontfamily = "arial",
+                                    cat.col = c(cb["blue"], cb["red"], cb["green"], cb["grey"])))
+
+```
+
+The overwhelming majority of OTUs are significant across all four factors. This means
+that the abundance of most OTUs responds to host genotype, exposure and antibiotics.
+Interestingly, 23 OTUs don't respond to either exposure at all but do respond to
+genotype and antibiotics. Only 7 OTUs respond to genotype, antibiotics and exposure 1 
+but not genotype, antibiotics and exposure 2. Another 7 OTUs respond to genotype, 
+antibiotics and exposure 2 but no genotype, antibiotics and exposure 1. Anyway, we
+cannot really make any use of these main effects without considering the interactions. 
+We can now use the same Venn diagram to represent the interactions. The outer most
+areas will represent the main effects but all areas of overlap represent interactions.
+
+```{r echo=FALSE,fig.width=6,fig.height=6}
+alpha <- 0.05
+delta <- 1
+# Main effects only (exclude interactions)
+sig_antibiotic <- df_T2[df_T2$pval.antibiotic.fdr <= alpha &
+                          rowSums(df_T2[, 26:36] <= alpha) > 0, "OTUname"]
+sig_genotype <- df_T2[df_T2$pval.genotype.fdr <= alpha  &
+                        rowSums(df_T2[, 26:36] <= alpha) > 0, "OTUname"]
+sig_exp1 <- df_T2[df_T2$pval.exposure_one <= alpha  &
+                    rowSums(df_T2[, 26:36] <= alpha) > 0, "OTUname"]
+sig_exp2 <- df_T2[df_T2$pval.exposure_two <= alpha  &
+                    rowSums(df_T2[, 26:36] <= alpha) > 0, "OTUname"]
+main_vals <- c(sig_antibiotic = length(sig_antibiotic),
+               sig_genotype = length(sig_genotype),
+               sig_exp1 = length(sig_exp1),
+               sig_exp2 = length(sig_exp2))
+# Four-way interaction
+sig_antibiotic_genotype_exposure_one_exposure_two <- 
+  df_T2[df_T2$pval.antibiotic_genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+# Three-way interactions
+sig_antibiotic_exposure_one_exposure_two <- df_T2[df_T2$pval.antibiotic_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one_exposure_two <- df_T2[df_T2$pval.genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_two <- df_T2[df_T2$pval.antibiotic_genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_one <- df_T2[df_T2$pval.antibiotic_genotype_exposure_one.fdr <= alpha, "OTUname"]
+# Two-way interactions
+sig_antibiotic_genotype <- df_T2[df_T2$pval.antibiotic_genotype.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_one <- df_T2[df_T2$pval.antibiotic_exposure_one.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one <- df_T2[df_T2$pval.genotype_exposure_one.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_two <- df_T2[df_T2$pval.antibiotic_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_two <- df_T2[df_T2$pval.genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_exposure_one_exposure_two <- df_T2[df_T2$pval.exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+
+inter_vals <- c(sig_antibiotic_genotype = length(sig_antibiotic_genotype),
+                sig_antibiotic_exposure_one = length(sig_antibiotic_exposure_one),
+                sig_genotype_exposure_one = length(sig_genotype_exposure_one),
+                sig_antibiotic_exposure_two = length(sig_antibiotic_exposure_two),
+                sig_genotype_exposure_two = length(sig_genotype_exposure_two),
+                sig_exposure_one_exposure_two = length(sig_exposure_one_exposure_two),
+                sig_antibiotic_exposure_one_exposure_two = length(sig_antibiotic_exposure_one_exposure_two),
+                sig_genotype_exposure_one_exposure_two = length(sig_genotype_exposure_one_exposure_two),
+                sig_antibiotic_genotype_exposure_two = length(sig_antibiotic_genotype_exposure_two),
+                sig_antibiotic_genotype_exposure_one = length(sig_antibiotic_genotype_exposure_one),
+                sig_antibiotic_genotype_exposure_one_exposure_two = length(sig_antibiotic_genotype_exposure_one_exposure_two))
+
+venn.plot <- my_venn(
+  area1 = sum(inter_vals[grep("genotype", names(inter_vals))]),
+  area2 = sum(inter_vals[grep("antibiotic", names(inter_vals))]),
+  area3 = sum(inter_vals[grep("exposure_one", names(inter_vals))]),
+  area4 = sum(inter_vals[grep("exposure_two", names(inter_vals))]),
+  n12 = inter_vals["sig_antibiotic_genotype"],
+  n13 = inter_vals["sig_genotype_exposure_one"],
+  n14 = inter_vals["sig_genotype_exposure_two"],
+  n23 = inter_vals["sig_antibiotic_exposure_one"],
+  n24 = inter_vals["sig_antibiotic_exposure_two"],
+  n34 = inter_vals["sig_exposure_one_exposure_two"],
+  n123 = inter_vals["sig_antibiotic_genotype_exposure_one"],
+  n124 = inter_vals["sig_antibiotic_genotype_exposure_two"],
+  n134 = inter_vals["sig_genotype_exposure_one_exposure_two"],
+  n234 = inter_vals["sig_antibiotic_exposure_one_exposure_two"],
+  n1234 = inter_vals["sig_antibiotic_genotype_exposure_one_exposure_two"],
+  category = c("Genotype", "Antibiotics", "Exposure 1", "Exposure 2"),
+  fill = c(cb["blue"], cb["red"], cb["green"], cb["grey"]),
+  lty = 1,
+  cex = 1,
+  cat.cex = 1,
+  cat.col = c(cb["blue"], cb["red"], cb["green"], cb["grey"]))
+#graphics.off()
+#grid.draw(venn.plot)
+```
+
+This diagram is more interesting. Here, the areas of overlap indicate statistically
+significant interactions between the factors. The two-way interaction between genotype
+and exposure 1 is significant for 291 OTUs and the two-way interaction between genotype and exposure 2
+is significant for 295 OTUs. This means that most of the OTUs respond differently to each
+exposure depending on the coral genotype. Again, this might be due to the initial differences
+in the microbial communities between the hosts.
+
+The two-way interaction between exposure 1 and exposure 2 is significant for 117 OTUs, which
+means that these OTUs responded differently to exposure 2 depending on which level of 
+exposure 1 they received. This is evidence of a **priority effect**.
+
+The two-way interaction between genotype and antibiotics was significant for 165 OTUs
+indicating that the exposure treatments essentially had no effects for a decent number
+of bacteria.
+
+The two-way interaction between antibiotics and exposure 2 was significant for 44 OTUs and
+the two-way interaction between antibiotics and exposure 1 was significant for 57 OTUs.
+This means that there is evidence of a **probiotic effect**, with a total of
+101 OTUs responding differently to exposure based on the antibiotic treatment they received.
+
+The three-way interaction between antibiotics, exposure 1 and exposure 2 was significant for
+only 3 OTUs. This suggests that the antibiotic treatment had a weak **legacy effect**
+by affecting the responses of only 3 OTUs to exposure 1 and 2. 
+
+I'm not happy with this representation because we have hijacked the concept of intersections
+and replaced them with interactions. I think a barplot with the y-axis representing each
+factor combination and the x-axis representing the number of OTUs would be better:
+
+
+```{r echo=FALSE,fig.width=6,fig.height=11}
+
+alpha <- 0.05
+delta <- 1
+# Main effects only (exclude interactions)
+sig_antibiotic <- df_T2[df_T2$pval.antibiotic.fdr <= alpha, "OTUname"]
+sig_genotype <- df_T2[df_T2$pval.genotype.fdr <= alpha, "OTUname"]
+sig_exp1 <- df_T2[df_T2$pval.exposure_one <= alpha, "OTUname"]
+sig_exp2 <- df_T2[df_T2$pval.exposure_two <= alpha, "OTUname"]
+# Two-way interactions
+sig_antibiotic_genotype <- df_T2[df_T2$pval.antibiotic_genotype.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_one <- df_T2[df_T2$pval.antibiotic_exposure_one.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one <- df_T2[df_T2$pval.genotype_exposure_one.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_two <- df_T2[df_T2$pval.antibiotic_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_two <- df_T2[df_T2$pval.genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_exposure_one_exposure_two <- df_T2[df_T2$pval.exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+# Three-way interactions
+sig_antibiotic_exposure_one_exposure_two <- df_T2[df_T2$pval.antibiotic_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one_exposure_two <- df_T2[df_T2$pval.genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_two <- df_T2[df_T2$pval.antibiotic_genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_one <- df_T2[df_T2$pval.antibiotic_genotype_exposure_one.fdr <= alpha, "OTUname"]
+# Four-way interaction
+sig_antibiotic_genotype_exposure_one_exposure_two <- 
+  df_T2[df_T2$pval.antibiotic_genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+
+vals <- list(G = sig_genotype,
+             AB = sig_antibiotic,
+             E1 = sig_exp1,
+             E2 = sig_exp2,
+             'G x AB' = sig_antibiotic_genotype,
+             'G x E1' = sig_genotype_exposure_one,
+             'G x E2' = sig_genotype_exposure_two,
+             'AB x E1' = sig_antibiotic_exposure_one,
+             'AB x E2' = sig_antibiotic_exposure_two,
+             'E1 x E2' = sig_exposure_one_exposure_two,
+             'G x AB x E1' = sig_antibiotic_genotype_exposure_one,
+             'G x AB x E2' = sig_antibiotic_genotype_exposure_two,
+             'G x E1 x E2' = sig_genotype_exposure_one_exposure_two,
+             'AB x E1 x E2' = sig_antibiotic_exposure_one_exposure_two,
+             'G x AB x E1 x E2' = sig_antibiotic_genotype_exposure_one_exposure_two)
+elements <- lapply(vals, length)
+names <- names(elements)
+par(plotconf)
+par(mar = c(3, 8, 2, 1))
+bp <- barplot(rev(as.numeric(elements)), names = rev(names), horiz = TRUE,
+              xaxs = "i", xlim = c(0, 1300), xlab = "Number of signifificant OTUs")
+axis(2, at = bp, lab = NA)
+mbox(aty = bp)
+```
+
+
+## Boxplots
+
+Showing fold changes is really tricky given all the significant interactions. I've
+settled on the following approach. The first figure will focus on the main effects of
+antibiotics, exposure 1 and exposure 2 (1 row x 3 columns). The second figure will focus
+on two-way interactions (1 row x 6 columns). The third figure will focus on the three-way
+interaction (1 row x 4 columns). For each of these panels, I will display the distribution
+of fold change of families with 5 or more OTUs.
+
+### Main effects
+
+```{r echo=FALSE,fig.width=11,fig.height=10}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# Antibiotics
+sig_OTUs <- df_T2[df_T2$pval.antibiotic.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "PlusA" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.PlusA"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "MinusA" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.MinusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 5 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+par(plotconf)
+par(mar = c(3, 10, 2, 1))
+par(mfrow = c(1, 3))
+# Panel 1
+min <- -9
+max <- 8
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(+AB/-AB)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.exposure_one.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 5 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 2
+#min <- -8
+#max <- 8
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D1/H1)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 1", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Exposure 2 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure2.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure2.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 5 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 3
+#max <- max(merged_updown_T2$logRatio)
+#min <- min(merged_updown_T2$logRatio)
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 2", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+```
+
+### Two-way interactions
+
+```{r echo=FALSE,fig.width=11,fig.height=10}
+# ---- Antibiotics x Exposure 1 ----
+# +AB x Exp 1
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_one.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_one.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "PlusA" & exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "PlusA" & exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+par(plotconf)
+par(mar = c(3, 10, 2, 1))
+par(mfrow = c(3, 2))
+# Panel 1
+min <- -6
+max <- 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D1/H1)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x Exp 1
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_one.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_one.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "MinusA" & exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "MinusA" & exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 2
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D1/H1)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Antibiotics x Exposure 2 ----
+# +AB x Exp 2
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "PlusA" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "PlusA" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure2.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure2.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 3
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x Exp 1
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "MinusA" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "MinusA" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure2.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure2.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 4
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Exposure 1 x Exposure 2 ----
+# Exp 1 x Exp 2
+sig_OTUs <- df_T2[df_T2$pval.exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            exposure_one == "D" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           exposure_one == "D" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure2.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure2.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 5
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 1: Disease", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# Exp 1 x Exp 2
+sig_OTUs <- df_T2[df_T2$pval.exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            exposure_one == "H" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           exposure_one == "H" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure2.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure2.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 1: Healthy", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+```
+
+There are some interesting patterns here. From the first row,
+we can see that only a few OTUs show significant two-way interactions between antibiotics
+and exposure 1. Many families have singleton OTUs so I had to reduce the cutoff to 2 OTUs/family.
+Hitting the corals with antibiotics can lead to the suppression of many of these microbes.
+For the Alteromanadaceae family, abundance goes from increasing 2-fold when dosed with a diseased
+slurry without antibiotics to decreasing nearly 2-fold with antibiotics. This pattern holds for
+most of these families with the exception of Flavobacteriaceae, which actually thrive under antibiotics
+(perhaps competitive release due to knock-down effect of antibiotics on other microbial species?). 
+Additionally, there seems to be more spread within families in terms of fold change in the presence of
+antibiotics suggesting differential susceptibility to antibiotics within families.
+
+For the second row, even fewer OTUs/families show a significant antibiotics x exposure 2 interaction.
+The addition of antibiotics significantly reduces the abundance and variance of Colwelliaceae and Vibionaceae,
+but increases the variance of the response of Hahellaceae and Rhodobacteraceae.
+
+For the third row, more families/OTUs exhibit significant exposure 1 x exposure 2 interactions.
+When corals are exposed to a disease dose first, Colwell, Oceano, Flavo and Vibrio increase in
+abundance when exposed to a second dose whereas Desul and Hahel decrease in abundance.
+When corals are exposed to a heathy dose first, Colwell, Oceano, Flavo and Vibrio decrease in abundance
+when exposed to a second dose whereas Desul increases in abundance. This suggests that the the
+order of colonization affects the response of these bacteria to dose. This is pretty good evidence of
+a **priority effect**.
+
+
+### Three-way interactions
+
+There are only 4 OTUs that have significant 3-way interactions so I did not conduct
+this analysis.
+
+```{r echo=FALSE,eval=FALSE, fig.width=11,fig.height=10}
+# ---- Antibiotics x Exposure 1 x Exposure 2 ----
+# +AB x H1
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "PlusA" & exposure_one == "H" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "PlusA" & exposure_one == "H" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+par(plotconf)
+par(mar = c(3, 10, 2, 1))
+par(mfrow = c(1, 4))
+# Panel 1
+min <- -6
+max <- 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics and Exposure 1: Healthy", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# +AB x D1
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "PlusA" & exposure_one == "D" exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "PlusA" & exposure_one == "D" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 2
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics, Exposure 1: Disease", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x H1
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "MinusA" & exposure_one == "H" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "MinusA" & exposure_one == "H" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 3
+min <- -6
+max <- 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics and Exposure 1: Healthy", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x D1
+sig_OTUs <- df_T2[df_T2$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t2_long, 
+                                            antibiotic == "MinusA" & exposure_one == "D" exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.num"
+updown_T2_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t2_long, 
+                                           antibiotic == "MinusA" & exposure_one == "D" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.den"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.num + delta) / (merged_updown_T2$abund.den + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T2_family <- merged_sig_updown_T2_family[merged_sig_updown_T2_family[, "signif"] > cutoff, ]
+updown_T2_mean <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = mean, na.rm = TRUE)
+merged_updown_T2 <- merge(merged_updown_T2, merged_sig_updown_T2_family)
+
+# Panel 4
+bp <- boxplot(logRatio ~ family, data = merged_updown_T2, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics and Exposure 1: Disease", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T2$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+```
+
+# T3
+
+## Venn diagram
+
+This is for the main effects only (i.e., these are the OTUs that are significant
+for main effects only but no two-, three- or four-way interaction). Here, 
+the areas of overlap mean that the main effects of multiple factors are significant.
+
+```{r echo=FALSE,fig.width=6,fig.height=6}
+alpha <- 0.05
+delta <- 1
+# Main effects only (exclude interactions)
+sig_antibiotic <- df_T3[df_T3$pval.antibiotic.fdr <= alpha &
+                          rowSums(df_T3[, 26:36] <= alpha) == 0, "OTUname"]
+sig_antibiotic <- sig_antibiotic[!is.na(sig_antibiotic)] 
+sig_genotype <- df_T3[df_T3$pval.genotype.fdr <= alpha  &
+                        rowSums(df_T3[, 26:36] <= alpha) == 0, "OTUname"]
+sig_genotype <- sig_genotype[!is.na(sig_genotype)] 
+sig_exp1 <- df_T3[df_T3$pval.exposure_one <= alpha  &
+                    rowSums(df_T3[, 26:36] <= alpha) == 0, "OTUname"]
+sig_exp1 <- sig_exp1[!is.na(sig_exp1)] 
+sig_exp2 <- df_T3[df_T3$pval.exposure_two <= alpha  &
+                    rowSums(df_T3[, 26:36] <= alpha) == 0, "OTUname"]
+sig_exp2 <- sig_exp2[!is.na(sig_exp2)] 
+
+grid.draw(VennDiagram::venn.diagram(list(Genotype = sig_genotype,
+                                         Antibiotic = sig_antibiotic,
+                                         Exp1 = sig_exp1, Exp2 = sig_exp2), NULL,             
+                                    category = c("Genotype", "Antibiotics", "Exposure 1", "Exposure 2"),
+                                    fill = c(cb["blue"], cb["red"], cb["green"], cb["grey"]),
+                                    lty = 1,
+                                    cex = 1,
+                                    cat.cex = 1,
+                                    main.fontfamily = "arial", 
+                                    sub.fontfamily = "arial",
+                                    cat.col = c(cb["blue"], cb["red"], cb["green"], cb["grey"])))
+
+```
+
+The overwhelming majority of OTUs are significant across all four factors. This means
+that the abundance of most OTUs responds to host genotype, exposure and antibiotics.
+Interestingly, 7 OTUs don't respond to either exposure at all but do respond to
+genotype and antibiotics. Anyway, we cannot really make any use of these main effects 
+without considering the interactions. We can now use the same Venn diagram to represent 
+the interactions. The outer most areas will represent the main effects but all areas 
+of overlap represent interactions.
+
+```{r echo=FALSE,fig.width=6,fig.height=6}
+alpha <- 0.05
+delta <- 1
+# Main effects only (exclude interactions)
+sig_antibiotic <- df_T3[df_T3$pval.antibiotic.fdr <= alpha &
+                          rowSums(df_T3[, 26:36] <= alpha) > 0, "OTUname"]
+sig_genotype <- df_T3[df_T3$pval.genotype.fdr <= alpha  &
+                        rowSums(df_T3[, 26:36] <= alpha) > 0, "OTUname"]
+sig_exp1 <- df_T3[df_T3$pval.exposure_one <= alpha  &
+                    rowSums(df_T3[, 26:36] <= alpha) > 0, "OTUname"]
+sig_exp2 <- df_T3[df_T3$pval.exposure_two <= alpha  &
+                    rowSums(df_T3[, 26:36] <= alpha) > 0, "OTUname"]
+main_vals <- c(sig_antibiotic = length(sig_antibiotic),
+               sig_genotype = length(sig_genotype),
+               sig_exp1 = length(sig_exp1),
+               sig_exp2 = length(sig_exp2))
+# Four-way interaction
+sig_antibiotic_genotype_exposure_one_exposure_two <- 
+  df_T3[df_T3$pval.antibiotic_genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+# Three-way interactions
+sig_antibiotic_exposure_one_exposure_two <- df_T3[df_T3$pval.antibiotic_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one_exposure_two <- df_T3[df_T3$pval.genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_two <- df_T3[df_T3$pval.antibiotic_genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_one <- df_T3[df_T3$pval.antibiotic_genotype_exposure_one.fdr <= alpha, "OTUname"]
+# Two-way interactions
+sig_antibiotic_genotype <- df_T3[df_T3$pval.antibiotic_genotype.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_one <- df_T3[df_T3$pval.antibiotic_exposure_one.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one <- df_T3[df_T3$pval.genotype_exposure_one.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_two <- df_T3[df_T3$pval.antibiotic_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_two <- df_T3[df_T3$pval.genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_exposure_one_exposure_two <- df_T3[df_T3$pval.exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+
+inter_vals <- c(sig_antibiotic_genotype = length(sig_antibiotic_genotype),
+                sig_antibiotic_exposure_one = length(sig_antibiotic_exposure_one),
+                sig_genotype_exposure_one = length(sig_genotype_exposure_one),
+                sig_antibiotic_exposure_two = length(sig_antibiotic_exposure_two),
+                sig_genotype_exposure_two = length(sig_genotype_exposure_two),
+                sig_exposure_one_exposure_two = length(sig_exposure_one_exposure_two),
+                sig_antibiotic_exposure_one_exposure_two = length(sig_antibiotic_exposure_one_exposure_two),
+                sig_genotype_exposure_one_exposure_two = length(sig_genotype_exposure_one_exposure_two),
+                sig_antibiotic_genotype_exposure_two = length(sig_antibiotic_genotype_exposure_two),
+                sig_antibiotic_genotype_exposure_one = length(sig_antibiotic_genotype_exposure_one),
+                sig_antibiotic_genotype_exposure_one_exposure_two = length(sig_antibiotic_genotype_exposure_one_exposure_two))
+
+venn.plot <- my_venn(
+  area1 = sum(inter_vals[grep("genotype", names(inter_vals))]),
+  area2 = sum(inter_vals[grep("antibiotic", names(inter_vals))]),
+  area3 = sum(inter_vals[grep("exposure_one", names(inter_vals))]),
+  area4 = sum(inter_vals[grep("exposure_two", names(inter_vals))]),
+  n12 = inter_vals["sig_antibiotic_genotype"],
+  n13 = inter_vals["sig_genotype_exposure_one"],
+  n14 = inter_vals["sig_genotype_exposure_two"],
+  n23 = inter_vals["sig_antibiotic_exposure_one"],
+  n24 = inter_vals["sig_antibiotic_exposure_two"],
+  n34 = inter_vals["sig_exposure_one_exposure_two"],
+  n123 = inter_vals["sig_antibiotic_genotype_exposure_one"],
+  n124 = inter_vals["sig_antibiotic_genotype_exposure_two"],
+  n134 = inter_vals["sig_genotype_exposure_one_exposure_two"],
+  n234 = inter_vals["sig_antibiotic_exposure_one_exposure_two"],
+  n1234 = inter_vals["sig_antibiotic_genotype_exposure_one_exposure_two"],
+  category = c("Genotype", "Antibiotics", "Exposure 1", "Exposure 2"),
+  fill = c(cb["blue"], cb["red"], cb["green"], cb["grey"]),
+  lty = 1,
+  cex = 1,
+  cat.cex = 1,
+  cat.col = c(cb["blue"], cb["red"], cb["green"], cb["grey"]))
+#graphics.off()
+#grid.draw(venn.plot)
+```
+
+This diagram is more interesting. Here, the areas of overlap indicate statistically
+significant interactions between the factors. The two-way interaction between genotype
+and exposure 1 is significant for 291 OTUs and the two-way interaction between genotype and exposure 2
+is significant for 295 OTUs. This means that most of the OTUs respond differently to each
+exposure depending on the coral genotype. Again, this might be due to the initial differences
+in the microbial communities between the hosts.
+
+The two-way interaction between exposure 1 and exposure 2 is significant for 134 OTUs, which
+means that these OTUs responded differently to exposure 2 depending on which level of 
+exposure 1 they received. This is evidence of a **priority effect**.
+
+The two-way interaction between genotype and antibiotics was significant for 227 OTUs
+indicating that the exposure treatments essentially had no effects for a decent number
+of bacteria.
+
+The two-way interaction between antibiotics and exposure 2 was significant for 118 OTUs and
+the two-way interaction between antibiotics and exposure 1 was significant for 173 OTUs.
+This means that there is evidence of a **probiotic effect**, with a total of
+291 OTUs responding differently to exposure based on the antibiotic treatment they received.
+
+The three-way interaction between antibiotics, exposure 1 and exposure 2 was significant for
+only 9 OTUs. This suggests that the antibiotic treatment had a weak **legacy effect**
+by affecting the responses of only 9 OTUs to exposure 1 and 2. 
+
+I'm not happy with this representation because we have hijacked the concept of intersections
+and replaced them with interactions. I think a barplot with the y-axis representing each
+factor combination and the x-axis representing the number of OTUs would be better:
+
+
+```{r echo=FALSE,fig.width=6,fig.height=11}
+
+alpha <- 0.05
+delta <- 1
+# Main effects only (exclude interactions)
+sig_antibiotic <- df_T3[df_T3$pval.antibiotic.fdr <= alpha, "OTUname"]
+sig_genotype <- df_T3[df_T3$pval.genotype.fdr <= alpha, "OTUname"]
+sig_exp1 <- df_T3[df_T3$pval.exposure_one <= alpha, "OTUname"]
+sig_exp2 <- df_T3[df_T3$pval.exposure_two <= alpha, "OTUname"]
+# Two-way interactions
+sig_antibiotic_genotype <- df_T3[df_T3$pval.antibiotic_genotype.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_one <- df_T3[df_T3$pval.antibiotic_exposure_one.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one <- df_T3[df_T3$pval.genotype_exposure_one.fdr <= alpha, "OTUname"]
+sig_antibiotic_exposure_two <- df_T3[df_T3$pval.antibiotic_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_two <- df_T3[df_T3$pval.genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_exposure_one_exposure_two <- df_T3[df_T3$pval.exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+# Three-way interactions
+sig_antibiotic_exposure_one_exposure_two <- df_T3[df_T3$pval.antibiotic_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_genotype_exposure_one_exposure_two <- df_T3[df_T3$pval.genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_two <- df_T3[df_T3$pval.antibiotic_genotype_exposure_two.fdr <= alpha, "OTUname"]
+sig_antibiotic_genotype_exposure_one <- df_T3[df_T3$pval.antibiotic_genotype_exposure_one.fdr <= alpha, "OTUname"]
+# Four-way interaction
+sig_antibiotic_genotype_exposure_one_exposure_two <- 
+  df_T3[df_T3$pval.antibiotic_genotype_exposure_one_exposure_two.fdr <= alpha, "OTUname"]
+
+vals <- list(G = sig_genotype,
+             AB = sig_antibiotic,
+             E1 = sig_exp1,
+             E2 = sig_exp2,
+             'G x AB' = sig_antibiotic_genotype,
+             'G x E1' = sig_genotype_exposure_one,
+             'G x E2' = sig_genotype_exposure_two,
+             'AB x E1' = sig_antibiotic_exposure_one,
+             'AB x E2' = sig_antibiotic_exposure_two,
+             'E1 x E2' = sig_exposure_one_exposure_two,
+             'G x AB x E1' = sig_antibiotic_genotype_exposure_one,
+             'G x AB x E2' = sig_antibiotic_genotype_exposure_two,
+             'G x E1 x E2' = sig_genotype_exposure_one_exposure_two,
+             'AB x E1 x E2' = sig_antibiotic_exposure_one_exposure_two,
+             'G x AB x E1 x E2' = sig_antibiotic_genotype_exposure_one_exposure_two)
+elements <- lapply(vals, length)
+names <- names(elements)
+par(plotconf)
+par(mar = c(3, 8, 2, 1))
+bp <- barplot(rev(as.numeric(elements)), names = rev(names), horiz = TRUE,
+              xaxs = "i", xlim = c(0, 2300), xlab = "Number of signifificant OTUs")
+axis(2, at = bp, lab = NA)
+mbox(aty = bp)
+```
+
+## Boxplots
+
+Showing fold changes is really tricky given all the significant interactions. I've
+settled on the following approach. The first figure will focus on the main effects of
+antibiotics, exposure 1 and exposure 2 (1 row x 3 columns). The second figure will focus
+on two-way interactions (1 row x 6 columns). The third figure will focus on the three-way
+interaction (1 row x 4 columns). For each of these panels, I will display the distribution
+of fold change of families with 5 or more OTUs.
+
+### Main effects
+
+```{r echo=FALSE,fig.width=11,fig.height=18}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# Antibiotics
+sig_OTUs <- df_T3[df_T3$pval.antibiotic.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "PlusA" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.PlusA"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "MinusA" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.MinusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 5 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+par(plotconf)
+par(mar = c(3, 10, 2, 1))
+par(mfrow = c(1, 3))
+# Panel 1
+min <- -9
+max <- 8
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(+AB/-AB)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.exposure_one.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 5 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 2
+#min <- -8
+#max <- 8
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D1/H1)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 1", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Exposure 2 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure2.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure2.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 5 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 3
+#max <- max(merged_updown_T3$logRatio)
+#min <- min(merged_updown_T3$logRatio)
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 2", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+```
+
+There are a lot more differentially abundant bacteria at T3 than T2. Most bacteria
+are less abundant in the presence of antibiotics than in its absense with the notable
+exception of Halomonadaceae, Pseudomonadaceae, and Simkaniaceae. Interestingly, 
+these last families saw their fold change decrease after exposure 1. There's a lot
+left to digest here.
+
+### Two-way interactions
+
+```{r echo=FALSE,fig.width=11,fig.height=10}
+# ---- Antibiotics x Exposure 1 ----
+# +AB x Exp 1
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_one.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_one.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "PlusA" & exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "PlusA" & exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+par(plotconf)
+par(mar = c(3, 10, 2, 1))
+par(mfrow = c(3, 2))
+# Panel 1
+min <- -6
+max <- 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D1/H1)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x Exp 1
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_one.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_one.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "MinusA" & exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "MinusA" & exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 2
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D1/H1)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Antibiotics x Exposure 2 ----
+# +AB x Exp 2
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "PlusA" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "PlusA" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure2.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure2.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 3
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x Exp 1
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "MinusA" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "MinusA" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure2.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure2.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 4
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# ---- Exposure 1 x Exposure 2 ----
+# Exp 1 x Exp 2
+sig_OTUs <- df_T3[df_T3$pval.exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "D" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "D" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure2.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure2.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 5
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 1: Disease", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# Exp 1 x Exp 2
+sig_OTUs <- df_T3[df_T3$pval.exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "H" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "H" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure2.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure2.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "Exposure 1: Healthy", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+```
+
+There are some interesting patterns here. From the first row, hitting the corals with 
+antibiotics typically leads to larger fold changes following exposure. This means
+that antibiotics may be promoting bacterial growth in disease treatments in the long-run. 
+For instance, Flavos, Planctos, Sapros, Rhodos, and Rubris have much higher fold changes in the presence of 
+antibiotics than in their absence. Conversely, Hahell and Halos fold changes increase without
+antibiotics. This could be indirect evidence of a **probiotic effect**: antibiotics knocks down
+biotic resistance and make it easier for invasive microbes to take hold.
+
+For the second row, we see opposite patterns for some families! For instance, Flavo and Rhodo have
+lower fold changes with antibiotics than without antibiotics. We also see different families
+reacting to the second exposure relative to the first one. Assuming that both exposures
+where drawn from the same broth, these results suggest potential **successional dynamics** in 
+the assembly of the microbiome.
+
+For the third row, when corals are exposed to a disease dose first, most families
+are more abundant in the disease than the healthy second dose (negative fold changes).
+For instance, Alca, Cryo, Flavo, Hahell, Halos, Rhodos and Sapros see a reduction in their 
+fold change following exposure 2 (i.e., more abundant in H2 than D2), whereas Oceanos 
+see an increase. However, When corals are exposed to a healthy dose first, most families 
+experience a positive fold change (higher abundance in D2 than H2). For instance,
+Cryo, Flavo, Hahell, Halos, Hyphos, Rhodo, Sapro, and Shewa experience an increase in fold change following exposure 2.
+This suggests that the the order of colonization affects the response of these bacteria to dose. 
+This is pretty good evidence of a **priority effect**.
+
+### Three-way interactions
+
+There are only 10 OTUs that have significant 3-way interactions so I did not conduct
+this analysis.
+
+```{r echo=FALSE,eval=FALSE, fig.width=11,fig.height=10}
+# ---- Antibiotics x Exposure 1 x Exposure 2 ----
+# +AB x H1
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "PlusA" & exposure_one == "H" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "PlusA" & exposure_one == "H" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+par(plotconf)
+par(mar = c(3, 10, 2, 1))
+par(mfrow = c(1, 4))
+# Panel 1
+min <- -6
+max <- 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics and Exposure 1: Healthy", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# +AB x D1
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "PlusA" & exposure_one == "D" exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "PlusA" & exposure_one == "D" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 2
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "+Antibiotics, Exposure 1: Disease", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x H1
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "MinusA" & exposure_one == "H" & exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "MinusA" & exposure_one == "H" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 3
+min <- -6
+max <- 6
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics and Exposure 1: Healthy", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+# -AB x D1
+sig_OTUs <- df_T3[df_T3$pval.antibiotic_exposure_one_exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.antibiotic_exposure_one_exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            antibiotic == "MinusA" & exposure_one == "D" exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.num"
+updown_T3_PlusA <- aggregate(abundance ~ family + OTUname,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           antibiotic == "MinusA" & exposure_one == "D" & exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.den"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.num + delta) / (merged_updown_T3$abund.den + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+# Remove families with fewer than 5 OTUs
+cutoff <- 2 
+merged_sig_updown_T3_family <- merged_sig_updown_T3_family[merged_sig_updown_T3_family[, "signif"] > cutoff, ]
+updown_T3_mean <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = mean, na.rm = TRUE)
+merged_updown_T3 <- merge(merged_updown_T3, merged_sig_updown_T3_family)
+
+# Panel 4
+bp <- boxplot(logRatio ~ family, data = merged_updown_T3, ylab = "", 
+              xlab = expression(paste(log[2], "(D2/H2)")), 
+              ylim = c(min, max), cex.axis = 1, cex.lab = 1, outline = FALSE, horizontal = TRUE,
+              main = "-Antibiotics and Exposure 1: Disease", col = cb["grey"], 
+              xlim = rev(c(1, length(unique(merged_updown_T3$family)))))
+abline(v = 0, lty = 1)
+text(y = 1:length(bp$n), x = max - 0.5, bp$n)
+mbox(aty = 1:length(bp$n))
+
+```
+
+
+```{r echo=FALSE}
+invisible(file.remove(list.files(pattern = glob2rx("VennDiagram*.log"))))
+```
+
+

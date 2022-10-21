@@ -1,0 +1,143 @@
+---
+title: "DESeq2 Up/Down Summary and Plots by KEGG Pathway"
+author: "Chuck Roesel"
+date: "01/31/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r Load Libraries, message=FALSE, warning=FALSE, paged.print=FALSE}
+load("D_upDownSummary.RData")
+#install.packages("grid")
+library("grid")
+library("UpSetR")
+library("stringr")
+library("gdata")
+library("tidyr")
+library("dplyr")
+library("knitr")
+library("pander")
+library("kableExtra")
+library("pheatmap")
+library("DESeq2")
+load("summarizedDeResults.RData")
+```
+```{r}
+library("gage")
+library("gageData")
+data("kegg.sets.ko")
+exprs <- counts(ddsAll)
+vibrio <- rownames(colData[colData$Vibrio == 'Vibrio',])
+noVibrio <- rownames(colData[colData$Vibrio == 'NoVibrio',])
+menthol <- rownames(colData[colData$Menthol == 'Menthol',])
+noMenthol <- rownames(colData[colData$Menthol == 'NoMenthol',])
+samp <- match(vibrio, colnames(exprs))
+ref <- match(noVibrio, colnames(exprs))
+kegg.p <- gage(exprs, kegg.sets.ko, ref=ref, samp=samp, same.dir=TRUE)
+vibrioGreater <- as.data.frame(kegg.p$greater)
+vibrioGreater <- subset(vibrioGreater, q.val <= .05, select=c("p.val", "q.val", "set.size"))
+kable(vibrioGreater)
+#write.csv(vibrioGreater, file='keggVibrioGreater.csv')
+```
+```{r}
+samp <- match(menthol, colnames(exprs))
+ref <- match(noMenthol, colnames(exprs))
+kegg.p <- gage(exprs, kegg.sets.ko, ref=ref, samp=samp, same.dir=TRUE)
+kegg.p$less
+```
+
+```{r results='asis'}
+alpha=.05
+keggPathways <- read.table("koToPathway.tsv", sep='\t', header=TRUE, quote='')
+totalCountsPath <- aggregate(Gene~PathDesc,FUN=length,data=unique(keggPathways))
+colnames(totalCountsPath) = c("PathDesc","Total")
+tx2gene <- read.csv("tx2gene.csv", header=FALSE)
+colnames(tx2gene) <- c("Aip", "Gene")
+inGenome <- merge(keggPathways, tx2gene)
+inGenome <- unique(subset(inGenome, select=c("Gene", "PathDesc")))
+genomeCounts <- aggregate(Gene~PathDesc,FUN=length,data=inGenome)
+colnames(genomeCounts) = c("PathDesc","Genome")
+inDE <- merge(keggPathways, dfBothAnnot,by.x='Gene', by.y=0)
+inDE <- unique(subset(inDE, select=c("Gene", "PathDesc")))
+deCounts <- aggregate(Gene~PathDesc,FUN=length,data=inDE)
+colnames(deCounts) = c("PathDesc","DE")
+allPathCounts <- merge(totalCountsPath, genomeCounts, by='PathDesc',all.x=TRUE)
+allPathCounts <- merge(allPathCounts, deCounts, by='PathDesc',all.x=TRUE)
+#allPathCounts$DE_Pct <- sprintf("%1.1f", 100*(allPathCounts$DE/allPathCounts$Genome))
+allPathCounts$DE_Pct <- allPathCounts$DE/allPathCounts$Genome
+logThreshold=0
+alpha=.05
+upVibrio <- subset(dfBothAnnot, (padj.Vibrio < alpha) & (lfc.Vibrio > logThreshold))
+upVibrio <- merge(keggPathways, upVibrio,by.x='Gene', by.y=0)
+upVibrio <- aggregate(Gene~PathDesc,FUN=length,data=upVibrio)
+colnames(upVibrio) = c("PathDesc","Up Vibrio")
+downVibrio <- subset(dfBothAnnot, (padj.Vibrio < alpha) & (lfc.Vibrio < logThreshold))
+downVibrio <- merge(keggPathways, downVibrio,by.x='Gene', by.y=0)
+downVibrio <- aggregate(Gene~PathDesc,FUN=length,data=downVibrio)
+colnames(downVibrio) = c("PathDesc","Down Vibrio")
+upMenthol <- subset(dfBothAnnot, (padj.Menthol < alpha) & (lfc.Menthol > logThreshold))
+upMenthol <- merge(keggPathways, upMenthol,by.x='Gene', by.y=0)
+upMenthol <- aggregate(Gene~PathDesc,FUN=length,data=upMenthol)
+colnames(upMenthol) = c("PathDesc","Up Menthol")
+downMenthol <- subset(dfBothAnnot, (padj.Menthol < alpha) & (lfc.Menthol < logThreshold))
+downMenthol <- merge(keggPathways, downMenthol,by.x='Gene', by.y=0)
+downMenthol <- aggregate(Gene~PathDesc,FUN=length,data=downMenthol)
+colnames(downMenthol) = c("PathDesc","Down Menthol")
+upInter <- subset(dfBothAnnot, (padj.Inter < alpha) & (lfc.Inter > logThreshold))
+upInter <- merge(keggPathways, upInter,by.x='Gene', by.y=0)
+upInter <- aggregate(Gene~PathDesc,FUN=length,data=upInter)
+colnames(upInter) = c("PathDesc","Up Interaction")
+downInter <- subset(dfBothAnnot, (padj.Inter < alpha) & (lfc.Inter < logThreshold))
+downInter <- merge(keggPathways, downInter,by.x='Gene', by.y=0)
+downInter <- aggregate(Gene~PathDesc,FUN=length,data=downInter)
+colnames(downInter) = c("PathDesc","Down Interaction")
+allPathCounts <- merge(allPathCounts, upVibrio, by='PathDesc', all.x=TRUE)
+allPathCounts <- merge(allPathCounts, downVibrio, by='PathDesc', all.x=TRUE)
+allPathCounts <- merge(allPathCounts, upMenthol, by='PathDesc', all.x=TRUE)
+allPathCounts <- merge(allPathCounts, downMenthol, by='PathDesc', all.x=TRUE)
+allPathCounts <- merge(allPathCounts, upInter, by='PathDesc', all.x=TRUE)
+allPathCounts <- merge(allPathCounts, downInter, by='PathDesc', all.x=TRUE)
+allPathCounts[is.na(allPathCounts)] <- 0
+pathList <- subset(allPathCounts, (DE > 2) & (DE_Pct > .50), select=c("PathDesc"))
+allPathCounts <- subset(allPathCounts, (DE > 2) & (DE_Pct > .20))
+allPathCounts <- allPathCounts[with(allPathCounts, order(-DE_Pct)), ]
+head(allPathCounts)
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=TRUE, results='asis'}
+summarizeSearch <- function(searchText){
+  logThreshold=0
+  alpha=.05
+  pathSearch = grep(searchText, keggPathways$PathDesc)
+  pathDescriptions <- sort(unique(keggPathways$PathDesc[pathSearch]))
+  searchGenes <- sort(unique(inDE$Gene[pathSearch]))
+  dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% searchGenes)
+  genesInPath <- length(searchGenes)
+  deInPath <- length(rownames(dfBothAnnotSearch))
+    searchTitle <- searchText
+    cat("#", searchTitle, "\n")
+    upVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio > logThreshold))
+    downVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio < logThreshold))
+    upMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol > logThreshold))
+    downMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol < logThreshold))
+    upInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter > logThreshold))
+    downInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter < logThreshold))
+    listInput = list(UpVibrio = rownames(upVibrio), UpMenthol
+                   = rownames(upMenthol), DownVibrio=rownames(downVibrio), 
+                   DownMenthol=rownames(downMenthol), UpInteraction=rownames(upInter), DownInteraction=rownames(downInter))
+    upset(fromList(listInput), order.by = "freq", nsets=6)
+    #grid.text(searchText,x = 0.65, y=0.95, gp=gpar(fontsize=12))
+    dfTable = subset(dfBothAnnotSearch, select = c("GeneDesc", "lfc.Vibrio", "lfc.Menthol", "lfc.Inter"))
+    rownames(dfTable) <- dfTable$GeneDesc
+    dfTable$lfc.Vibrio[is.na(dfTable$lfc.Vibrio)] <- 0
+    dfTable$lfc.Menthol[is.na(dfTable$lfc.Menthol)] <- 0
+    dfTable$lfc.Inter[is.na(dfTable$lfc.Inter)] <- 0
+    dfTable <- select(dfTable, select = c("lfc.Vibrio", "lfc.Menthol", "lfc.Inter"))
+    colnames(dfTable) = c("LFC Vibrio", "LFC Menthol", "LFC Interaction")
+    print(kable(dfTable, format='html'))
+}
+for (pathDesc in pathList$PathDesc){
+  tryCatch({summarizeSearch(pathDesc)}, error=function(e){})
+}
+```

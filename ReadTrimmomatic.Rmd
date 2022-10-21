@@ -1,0 +1,39 @@
+---
+title: "ReadTrimmomatic"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library("stringr")
+library("knitr")
+```
+
+
+```{r}
+
+#Read in the Trimmomatic STDERR file
+trimLog <- read.table("trim.err", sep='\n', header=FALSE, quote='')
+#Get sample names
+sample <- str_match(trimLog$V1, "(Aip[0-9,N,A]{2})")[, 2]
+#Get input pairs
+input <- as.numeric(str_match(trimLog$V1, "Pairs: (.*?) ")[, 2])
+#Get output pairs
+passed <- as.numeric(str_match(trimLog$V1, "Surviving: (.*?) ")[, 2])
+#Get rid of NA
+sample <- sample[!is.na(sample)]
+passed <- passed[!is.na(passed)]
+input <- input[!is.na(input)]
+#Combine into data frame
+dfLog <- data.frame("Sample"=sample, "In"=input, "Out" =passed, stringsAsFactors = F)
+#Calculate percent passing quality filter
+dfLog$Percent <- with(dfLog, Out/In)
+#Format large numbers with comma separators
+dfLog$In <- prettyNum(dfLog$In, big.mark=",", scientific=F)
+dfLog$Out <- prettyNum(dfLog$Out, big.mark=",", scientific=F)
+#Format percent
+dfLog$Percent <- sprintf("%2.1f",100*dfLog$Percent)
+kable(dfLog, col.names=c("Sample", "Read Pairs In", "Read Pairs Out", "Percent"), 
+      align=c(rep('r', 2), rep('r', 3)))
+```

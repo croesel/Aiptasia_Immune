@@ -1,0 +1,22 @@
+---
+title: "AipAnnot3"
+author: "Chuck Roesel"
+date: "4/30/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+aipToKx <- read.table("aipgene_to_kxj.tsv", stringsAsFactors = F, header=F, sep="\t", quote='')
+colnames(aipToKx) <- c("qseqid", "KX")
+multiSpeciesAnnot <- read.table("test3KO.csv", stringsAsFactors = F, header=T, row.names = 1, sep=",")
+aipAnnot3 <- subset(multiSpeciesAnnot, prefix == 'Aip')
+aipAnnot3 <- merge(aipAnnot3, aipToKx)
+rownames(aipAnnot3) <- aipAnnot3$qseqid
+aipAnnot3$qseqid <- aipAnnot3$KX
+length(aipAnnot3$qseqid)
+length(aipAnnot3$KO)
+```

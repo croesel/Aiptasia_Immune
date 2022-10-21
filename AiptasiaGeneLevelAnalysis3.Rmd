@@ -1,0 +1,258 @@
+---
+title: "Aiptasia Gene Level Analysis 3"
+author: "Chuck Roesel"
+date: "3/24/2018"
+output:
+  pdf_document:
+    fig_caption: true
+  html_document:
+    df_print: paged
+  md_document:
+    variant: gfm
+    df_print: paged
+  word_document: default
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(linkcomm)
+```
+
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaGeneLevelAnalysis.RData")
+```
+
+
+```{r}
+network <- data.frame()
+networkB <- data.frame()
+networkC <- data.frame()
+pathSummary <- data.frame()
+for (pathway1 in unique(genePath$PathDesc)){
+  for (pathway2 in unique(genePath$PathDesc)){
+    v1 <- subset(genePath, PathDesc == pathway1)
+    v2 <- subset(genePath, PathDesc == pathway2)
+    commonCount <- length(intersect(unique(v1$KO), unique(v2$KO)))
+    unionCount <- length(union(unique(v1$KO), unique(v2$KO)))
+    percentCommon <- (commonCount/unionCount)*100
+    #if(pathway1 != pathway2){
+      if(commonCount > 0){
+        rowNum <- nrow(network) + 1
+        pathA <- unlist(strsplit(pathway1,  " ", fixed = FALSE, 
+                                 perl = FALSE, useBytes = FALSE))
+        pathB <- unlist(strsplit(pathway2,  " ", fixed = FALSE, 
+                                 perl = FALSE, useBytes = FALSE))
+        pathA <- pathA[2]
+        pathB <- pathB[2]
+        network[rowNum,"Pathway1"] <- pathA
+        network[rowNum, "Pathway2"] <- pathB
+        network[rowNum, "Weight"] <- commonCount
+        for (gene in intersect(unique(v1$KO), unique(v2$KO))){
+        networkB[rowNum,"Pathway1"] <- pathA
+        networkB[rowNum, "Pathway2"] <- pathB
+        networkB[rowNum, "Weight"] <- 1
+        networkC[rowNum,"Pathway1"] <- pathA
+        networkC[rowNum, "Gene"] <- gene
+        networkC[rowNum, "Weight"] <- 1
+        #networkB[rowNum, "Gene"] <- gene
+        }
+      }
+      pathSummary[pathway1, pathway2] <-commonCount
+    #}
+  }
+}
+write.csv(network, file="Network.csv")
+write.csv(networkB, file="NetworkB.csv")
+write.csv(networkC, file="NetworkC.csv")
+write.csv(pathSummary, file="pathSummary.csv")
+```
+
+
+```{r}
+mostOverlap <- data.frame()
+for (pathway in rownames(pathSummary)){
+  row <- pathSummary[pathway,]
+  row<-row[, order(colSums(-row))]
+  firstSim <- colnames(row[2])
+  secondSim <- colnames(row[3])
+  thirdSim <- colnames(row[4])
+  firstSim <- unlist(strsplit(firstSim,  " ", fixed = FALSE, 
+                              perl = FALSE, useBytes = FALSE))[2]
+  secondSim <- unlist(strsplit(secondSim,  " ", fixed = FALSE, 
+                               perl = FALSE, useBytes = FALSE))[2]
+  thirdSim <- unlist(strsplit(thirdSim,  " ", fixed = FALSE, 
+                              perl = FALSE, useBytes = FALSE))[2]
+  mostOverlap[pathway, "TopThree"] <- paste(firstSim, secondSim, thirdSim, sep="    ")
+}
+mostOverlap <- mostOverlap[order(mostOverlap$TopThree),,drop=F]
+mostOverlap$Path <- rownames(mostOverlap)
+```
+
+\newpage
+
+```{r}
+kable(mostOverlap, caption="Most Similar", digits=0, 
+      format="latex", 
+      booktabs=T, longtable=T) %>% 
+  kable_styling(latex_options=c("striped", "scale_down", "repeat_header"), 
+                full_width = F) %>% landscape()
+```
+
+
+```{r fig.height=6.5, fig.width=11}
+library("RColorBrewer")
+library("pheatmap")
+pathSummary[is.na(pathSummary)] <- 0
+sampleDistMatrix <- as.matrix(pathSummary)
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix, col=colors,cluster_rows = TRUE,
+cluster_cols = TRUE)
+```
+
+```{r fig.height=8.5, fig.width=11, message=FALSE, warning=FALSE}
+lc <- getLinkCommunities(network, directed = F, dirweight = 0.8, 
+                         plot=F, verbose=F, use.all.edges = T, 
+                         hcmethod = "median", removetrivial = FALSE)
+kable(lc$nodeclusters)
+lc2 <- getLinkCommunities(network, directed = F, dirweight = 0.8, 
+                          plot=F, verbose=F, use.all.edges = F, 
+                          hcmethod = "median", removetrivial = FALSE)
+kable(lc2$nodeclusters)
+lc3 <- getLinkCommunities(networkB, directed = F, dirweight = 0.8, 
+                          plot=F, verbose=F, use.all.edges = F, 
+                          hcmethod = "median", removetrivial = FALSE)
+kable(lc3$nodeclusters)
+lc4 <- getLinkCommunities(networkC, directed = F, dirweight = 0.8, 
+                          plot=F, verbose=F, use.all.edges = F, 
+                          hcmethod = "median", removetrivial = FALSE)
+kable(lc4$nodeclusters)
+```
+
+\newpage
+
+```{r fig.height=11, fig.width=11, message=FALSE, warning=FALSE}
+invisible(capture.output(plot(lc, type = "graph", verbose=F)))
+```
+
+\newpage
+
+```{r fig.height=11, fig.width=11, message=FALSE, warning=FALSE}
+invisible(capture.output(plot(lc2, type = "graph", verbose=F)))
+```
+
+\newpage
+
+```{r fig.height=11, fig.width=11, message=FALSE, warning=FALSE}
+invisible(capture.output(plot(lc3, type = "graph", verbose=F)))
+```
+
+\newpage
+
+```{r fig.height=11, fig.width=11, message=FALSE, warning=FALSE}
+invisible(capture.output(plot(lc4, type = "graph", verbose=F)))
+```
+
+\newpage
+
+Calculate Community Centrality
+
+```{r}
+cc <- getCommunityCentrality(lc2)
+kable(sort(cc, decreasing = TRUE))
+```
+
+```{r}
+pathCountByGene <- aggregate(PathDesc ~ Symbols, data=genePath, FUN=NROW)
+colnames(pathCountByGene) <- c("Symbols", "PathCount")
+uniqueGenes <- subset(pathCountByGene, PathCount==1)
+pathwaysWithUniqueGenes <- merge(genePath, uniqueGenes)
+uniqueGenePath <- subset(pathwaysWithUniqueGenes, 
+                             select=c("Symbols", "PathDesc", "Category", 
+                                      "VibrioL2FC", "MentholL2FC"))
+uniqueGenePath <- uniqueGenePath[ order(uniqueGenePath$Category, 
+                                            uniqueGenePath$PathDesc, 
+                                            uniqueGenePath$Symbols),]
+```
+```{r}
+uniqueCount <- aggregate(Symbols ~ PathDesc, data = uniqueGenePath, FUN = NROW)
+colnames(uniqueCount) <- c("Path", "Unique")
+```
+```{r}
+sharedGenes <- subset(pathCountByGene, PathCount > 1)
+pathwaysWithSharedGenes <- merge(genePath, sharedGenes)
+sharedGenePath <- subset(pathwaysWithSharedGenes, 
+                             select=c("Symbols", "PathDesc", "Category", 
+                                      "VibrioL2FC", "MentholL2FC"))
+sharedGenePath <- sharedGenePath[ order(sharedGenePath$Category, 
+                                            sharedGenePath$PathDesc, 
+                                            sharedGenePath$Symbols),]
+```
+```{r}
+sharedCount <- aggregate(Symbols ~ PathDesc, data = sharedGenePath, FUN = NROW)
+colnames(sharedCount) <- c("Path", "Shared")
+```
+```{r}
+pathDE <- aggregate(Symbols ~ PathDesc, data=genePath, FUN=NROW)
+colnames(pathDE) <- c("Path", "DE")
+```
+```{r}
+uniqueList <- aggregate(Symbols ~ PathDesc, data = uniqueGenePath, FUN = c)
+uniqueList$Symbols <- paste(uniqueList$Symbols)
+uniqueList$Symbols <- gsub("c\\(","",uniqueList$Symbols)
+uniqueList$Symbols <- gsub("\\)","",uniqueList$Symbols)
+colnames(uniqueList) <- c("Path", "Unique Genes")
+```
+
+```{r}
+sharedList <- aggregate(Symbols ~ PathDesc, data = sharedGenePath, FUN = c)
+sharedList$Symbols <- paste(sharedList$Symbols)
+sharedList$Symbols <- gsub("c\\(","",sharedList$Symbols)
+sharedList$Symbols <- gsub("\\)","",sharedList$Symbols)
+colnames(sharedList) <- c("Path", "Shared Genes")
+```
+
+
+```{r}
+allSummary <- merge(mostOverlap, sharedCount)
+allSummary <- merge(allSummary, uniqueCount)
+allSummary <- merge(allSummary, pathDE)
+allSummary <- merge(allSummary, uniqueList)
+allSummary <- merge(allSummary, sharedList)
+allSummary <- allSummary[order(allSummary$Shared, decreasing=T),]
+kable(allSummary, caption="Pathway Summary", digits=0, 
+      format="latex", 
+      booktabs=T, longtable=T, row.names = F) %>% 
+  kable_styling(latex_options=c("striped", "scale_down", "repeat_header"), 
+                full_width = F) %>% landscape() %>% column_spec (1, width = "10em") %>% column_spec (2, width = "6em")%>% column_spec(6, width = "10em") %>% column_spec(7, width = "10em")
+
+```
+
+```{r}
+geneList <- aggregate(PathDesc ~ Symbols, data = genePath, FUN = c)
+head(geneList)
+```
+```{r}
+geneCount <- aggregate(PathDesc ~ Symbols, data = genePath, FUN = NROW)
+colnames(geneCount) <- c("Symbols", "PathCount")
+geneListCount <- merge(geneCount, geneList)
+geneListCount$PathDesc <- paste(geneList$PathDesc)
+geneListCount <- geneListCount[order(geneListCount$PathCount, decreasing=T),]
+kable(geneListCount, caption="Gene Summary", digits=0, 
+      format="latex", 
+      booktabs=T, longtable=T, row.names = F) %>% 
+  kable_styling(latex_options=c("striped", "repeat_header"), 
+                full_width = F) %>% landscape() %>% column_spec (1, width = "10em") %>% column_spec (3, width = "30em")
+
+```
+

@@ -1,0 +1,567 @@
+---
+title: "Aiptasia Immune Response"
+output:
+  md_document:
+    variant: markdown_github
+  word_document: default
+  pdf_document:
+    citation_package: natbib
+  html_document:
+    fig_caption: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, results='asis')
+```
+```{r}
+#load("D_upDownSummary.RData")
+#load("summarizedDeResults.RData")
+rm(list = ls())
+library("knitr")
+library("kableExtra")
+library("grid")
+library("UpSetR")
+library("stringr")
+library("gdata")
+library("tidyr")
+library("dplyr")
+library("knitr")
+library("pander")
+library("pheatmap")
+library("DESeq2")
+library("rjson")
+library("tximport")
+library("readr")
+library("Biostrings")
+library(pathview)
+```
+
+**Abstract**
+
+**Introduction**
+
+Anthozoans are a class within the Cnidarians that includes corals, anemones and their relatives. In contrast to insect immune responses, very little is known about the immune response of this key group of invertebrates. Initial characterizations of immune related genes in cnidarians using genome and EST scans indicated that they possess the Toll/TLR pathway, complement C3, membrane attack complex/perforin domains, and other components of innate immunity once thought to have evolved much later [^Miller2007]. However, very little data existed indicating whether or not these immune pathways were actually used in cnidarians to mount a response against pathogens. A number of groups have since used RNA-seq to produce some of the first profiles of anthozoan innate immunity. Weiss et al. (2013) studied the response of *Acropora millepora* to the bacterial cell wall derivative muramyl dipeptide (MDP), finding up-regulation of GTPases of immunity associated proteins (GiMAPs) [^Weiss2013]. GiMAPS were formerly primarily associated with vertebrates and plants [^Liu2008] [^Wang2009]. Vidal-Dupiol et al. (2014) compared the transcriptomic responses of *Pocillopora damicornis* to thermal stress and *Vibrio coralliilyticus* Infection and found overall down-regulation of immune processes in response to thermal stress combined with thermally-induced virulence factors in *V. coralliilyticus.* Affected pathways included Toll-like, complement, prophenoloxidase, and the leukotriene cascade. Libro et al. (2013) compared the immune response of healthy and diseased corals using RNA-seq, finding up-regulation of C-type lectins, ROS production, arachidonic acid metabolism, and allene oxide production in diseased corals [^Libro2013]. Up-regulation of C-type lectins and ROS production are hallmarks of phagocytosis, and the metabolism of arachidonic acid via the allene oxide pathway has been linked to eicosanoid synthesis in wounded corals [^Lõhelaid]. Interestingly, they did not identify strong up-regulation of genes associated with the classic innate immune pathways such as Toll-like receptor pathway or Prophenoloxidase pathway.
+
+Vollmer and Kline (2008) identified staghorn coral genotypes with natural resistance to white-band disease [^Vollmer2008], and Libro and Vollmer (2016) compared gene expression patterns between these two genotypes using RNA-seq. They found that WBD-resistant corals exhibited up-regulation of NOD-like receptors (NLRs) and genes associated with RNA interference and down-regulation of heat-shock proteins [^Libro2016]. In the context of immunity, RNAi is generally associated with the response to viral infection, but experiments identifying bacterial pathogens as the causative agent of WBD [^Kline2011] make an antiviral role for RNAi in WBD resistance seem unlikely. The up-regulation of Argonaute and other RNAi-related genes may be related to miRNA-directed gene silencing in a manner similar to the regulation of auxin production associated with increased resistance to bacterial pathogens in plants [^Li2010]. While these RNA-Seq analyses have begun to confirm expression of the extensive immune repertoire found in anthozoan genomes and add to the growing consensus regarding the ancient origins of immunity [^Zhu2005] [^Dishaw2005] [^Kimura2009], detailed pathway analyses are needed to move toward the well-characterized pathways of model organisms like *Drosophila*.
+
+Reef-building corals and other anthozoans like *Aiptasia* are well known for their symbiotic relationship with the dinoflagellate *Symbiodinium* (also called zooxanthellae or “zoox”). The symbionts live in vacuoles inside the endodermis of the coral and give the host up to 95% of its energy as translocated polysaccharides. Symbiosis requires clear communication between the host and symbiont. During the establishment of symbiosis, the host must be able to recognize symbionts, engulf them in phagosomes, and shield these phagosomes from destruction [^Davy2012]. This suggests a clear link between symbioses and immunity wherein symbionts evade the immune response. Arrest of phagosomal maturation by Rab GTPases [^Davy2012] and suppression of immune responses by transforming growth factor beta (TGFB) have been identified as potential mechanisms by which symbionts are shielded from destruction by the immune system [^Detournay2012]. Once symbiosis is established, the host must regulate the growth of the symbionts and eject dead or dying symbionts [^Davy2012]. Regulation of nutrients has been identified as one mechanism by which the host can prevent overgrowth of the dinoflagellates [^Davy2012]. For corals and other symbiotic anemones, we know very little about how the relationship is maintained. Instead, we know a great deal about the breakdown in the symbiosis – known as bleaching – when the symbionts to be degraded or expelled by the coral host under stressful conditions like increased temperature.
+
+*Aiptasia* has become a model for studying symbiosis in anthozoans because it is a hardy animal that can be made aposymbiotic experimentally by exposing it to cold and heat stress as well as by treating it with compounds like menthol. Lehnert et al*.* (2014) used RNA-seq in a transcriptomic comparison of symbiotic and aposymbiotic anemones and found about 900 differentially expressed genes involved in metabolite transport, lipid metabolism, amino acid metabolism, and potentially host tolerance of dinoflagellates [^Lehnert2014]. Among those with a potentially tolerogenic role in symbiotic anemones the comparison revealed a general down-regulation of pro-inflammatory genes and up-regulation of anti-inflammatory genes [^Lehnert2014]. Down-regulated pro-inflammatory genes included those involved in nitric oxide production and up-regulated anti-inflammatory genes included scavenger receptor B class member 1 (SRB1) [^Lehnert2014]. SRB1 is of interest as a potential tolerogenic because of its heavy up-regulation in symbiotic anemones as [^Lehnert2014] well as its previously identified role in facilitating *Plasmodium* infection [^Yalaoui2008]. Detournay et al. (2012) performed an LPS exposure experiment using nitric oxide (NO) as a measure of immune activation to determine the role of TGFB in symbiosis [^Detournay2012]. They found that TGFB plays a tolerogenic role in the establishment and maintenance of symbiosis in *A. pallida*. Introduction of exogenous human TGFB reduced immune activation and partially blocked thermally-induced bleaching while Introduction of anti-TGFB blocked this pathway and prevented the establishment of symbiosis [^Detournay2012].
+
+The immune response of *Aiptasia* can provide insight into the evolutionary origin of the innate immune response as well as the mechanism behind the breakdown of symbiosis that leads to bleaching in corals. Obtaining 95% of their energy from the glucose produced by symbionts, *Aiptasia* must be able to defend against pathogens while tolerating algal symbionts in endodermal vacuoles. Immune suppression, measured by relative levels of nitric oxide (NO) production, has been demonstrated in symbiotic versus aposymbiotic anemones. Specific genes have been tested for their role in this immune suppression [^Detournay2012], and transcriptome-wide comparisons have been made between symbiotic and aposymbiotic anemones [^Lehnert2014]. Lehnert et al. (2012) compared the transcriptomes of symbiotic anemones to aposymbiotic anemones bleached by a combination of cold shock and the photosynthesis inhibitor Diuron [^Lehnert2014]. This comparison did not involve any immune challenge. It was strictly a comparison of un-challenged symbiotic to un-challenged aposymbiotic. This comparison was useful for identifying the whole range of genes involved in symbiosis, including metabolite transport [^Lehnert2014], but without an immune challenge it did not test for differences in immune response between symbiotic and aposymbiotic anemones. To-date there has not been a transcriptome-wide comparison of the response to immune challenge in aposymbiotic versus aposymbiotic anemones. Detournay et al*.* (2012) tested TGFB for its potential tolerogenic role in symbiosis by measuring the effect of human TGFB and anti-TGFB on NO production, establishment of symbiosis, and bleaching. They found strong evidence of a tolerogenic role. This type of focused analysis on specific genes will be needed to fully characterize pathways, but additional targets need to be identified.
+
+To further characterize the interactions between immunity, inflammation, and symbiosis, we used RNA-Seq to compare of the symbiotic and aposymbiotic response of *Aiptasia* to the pathogen *Vibrio coralliilyticus*. We chose menthol-bleaching as the method of producing aposymbiotic anemones because this method has a lower mortality rate and produces generally healthier anemones, and because the likely mechanism of menthol bleaching is activation of autophagic digestion of Symbiodinium cells (symbiophagy) as part of host innate immunity [^Dani2016]. Aposymbiotic anemones were produced using a 24-hour menthol bleaching cycle. Both symbiotic and aposymbiotic anemones were exposed to either live Vibrio or control for a total of four treatment groups with six biological replicates per group.
+
+**Materials and Methods**
+
+Aposymbiotic anemones were produced by exposure to 0.58 mM menthol/ASW using a modified version of the protocol outlined by Wang, Chen, Tew, Meng, and Chen (2012). Wild anemones were obtained from Carolina Biological Supply. These anemones, collected off the coast of North Carolina and kept in holding tanks [^Carolina2015], are the source from which the widely-used cc7 clonal population was developed [^Sunagawa2009]. The wild anemones are much larger than the available cc7 clones, and this facilitated extraction of sufficient high-quality RNA without requiring pooling within treatment groups.
+
+Upon arrival the anemones were placed in six six-well plates and maintained in the wells for a one-week acclimation phase. They were exposed to a 12-hour day/night cycle with a light intensity of 70 umol quanta m<sup>-2</sup> s<sup>-1</sup>. To avoid contamination of the RNA with any partially digested food the anemones were not fed during the acclimation phase. To avoid any bias based on lighting intensity or other positional effects, the four treatment groups were randomly assigned to wells within six-well plates.
+
+The menthol exposure was on a 48-hour cycle, with a 24-hour menthol exposure followed by a 24-hour resting period in ASW. A total of 36 anemones were put through the bleaching cycle. During the bleaching cycle, 18 anemones had water replaced with .58 mM menthol/FNSW, and 18 had water replaced with fresh FNSW. Six bleached and six unbleached anemones were homogenized prior to the Vibrio/Control treatment to determine the degree of bleaching. The degree of bleaching was measured by homogenizing anemones in 1uL filtered seawater, counting zoox with a hemocytometer, and normalizing by animal weight. After the 24-hour resting period in FNSW, the remaining 24 anemones were divided into four treatment groups:
+
+|            | Live *Vibrio* | Sterile Seawater |
+| ---------- | ------------- | ---------------- |
+| Bleached   | 6 anemones    | 6 anemones       |
+| Unbleached | 6 anemones    | 6 anemones       |
+
+The live *Vibrio* groups were inoculated at a concentration of 10<sup>8</sup> CFU ml<sup>-1</sup> in FNSW. The *Vibrio* inoculate was produced by centrifuging marine broth cultures, drawing off the broth, and re-suspending the pellet in FNSW. The anemones were exposed to either Vibrio or control for 24 hours, then immediately homogenized in Tri-Reagent.
+
+The anemones were homogenized using BioMasher mortar and pestle sets. Each anemone was first homogenized in 900 uL Tri-Reagent, then the 900 uL was divided into three separate tubes to which an additional 600 uL Tri-Reagent was added to ensure sufficient Tri-Reagent to completely lyse the cells. RNA was isolated separately from each of the 72 homogenate tubes per the Tri-Reagent manufacturer’s protocol. The total RNA was analyzed on an Agilent BioAnalyzer to obtain RIN scores.
+
+For each of the 24 samples the RNA isolate with the highest RIN score was selected to proceed to mRNA isolation and library preparation. mRNA was isolated using the NEBNext<sup>®</sup> Poly(A) mRNA Magnetic Isolation Module and Illumina libraries were produced using the NEBNext<sup>®</sup> Ultra<sup>™</sup> Directional RNA Library Prep Kit for Illumina<sup>®</sup>.
+
+Multiplexed paired-end libraries were sequenced on an Illumina HiSeq 2500 platform at the FAS Center for System Biology at Harvard University. The reads were adapter and quality-trimmed using Trimmomatic version 0.36 [^Bolger2014] using a 4-base sliding-window quality cutoff of 30 (Phred+33) and the TruSeq3 adapter sequence file (TruSeq3-PE.fa). Transcript counts were quantified against the published Aiptasia predicted coding sequences [^Baumgarten2014] using Salmon [^Patro2017]. The transcript counts were imported into DESeq2 [^Love2014] using tximport [^Soneson2015]. The transcript-to-gene mapping and annotation file was created by aligning predicted coding sequences to Swiss-Prot [^UniProt2017] using blastx [^NCBI2017].
+
+To facilitate pathway-level analysis Swiss-Prot blastx results were merged with the corresponding KEGG orthologs [^Kanehisa2016] using a custom Perl script. BLAST hits were filtered using an e-value cutoff of 1e-10<sup>-5</sup> and an alignment length of at least 50% of the target protein. In cases where the filtered BLAST hits mapped to more than one KEGG ortholog, the ortholog with the greatest number of matches was selected.
+
+```{r}
+alpha <- .05
+logThreshold <- .05
+geneDesc <- read.table("koDesc.tsv", sep='\t', header=TRUE, quote='')
+rownames(geneDesc) = geneDesc$Gene
+geneDesc <- subset(geneDesc, select=c(GeneDesc))
+dna <- readDNAStringSet("kTranscripts.fa")
+tx2geneNoAnnot <- data.frame(Transcript=names(dna), Gene=names(dna)) 
+tx2gene <- read.csv("tx2gene.csv", header=FALSE)
+colnames(tx2gene) <- c("Transcript", "Gene")
+dir <- 'quants'
+samples <- list.files(dir)
+files <- file.path(dir, samples, "quant.sf")
+print(files)
+colData <- read.csv("Samples.csv", row.names=1)
+colData$Menthol <- gsub("Control","NoMenthol",colData$Menthol)
+colData$Vibrio <- gsub("Control","NoVibrio",colData$Vibrio)
+colData <- colData[with(colData, order(row.names(colData))), ]
+runDE <- function(tx2gene){
+  txi.salmon <- tximport(files, type = "salmon", tx2gene=tx2gene)
+  ddsAll <- DESeqDataSetFromTximport(txi.salmon,
+                                     colData = colData,
+                                     design = ~ Vibrio + Menthol + Menthol:Vibrio)
+  ddsAll$Menthol <- relevel(ddsAll$Menthol, ref="NoMenthol")
+  ddsAll$Vibrio <- relevel(ddsAll$Vibrio, ref="NoVibrio")
+  ##Remove low counts
+  ddsAll <- ddsAll[ rowSums(counts(ddsAll)) > 10, ]
+  ##Run DESeq
+  ddsAll <- DESeq(ddsAll)
+  resVibrio <- results(ddsAll, alpha=.05, name="Vibrio_Vibrio_vs_NoVibrio")
+  resMenthol <- results(ddsAll, alpha=.05, name="Menthol_Menthol_vs_NoMenthol")
+  resInter <- results(ddsAll, alpha=.05, name="VibrioVibrio.MentholMenthol")
+  dfVibrio <- as.data.frame(resVibrio)
+  dfMenthol <- as.data.frame(resMenthol)
+  dfInter <- as.data.frame(resInter)
+  dfVibrio <- subset(subset(dfVibrio, padj < .05, select=c(log2FoldChange, padj)))
+  dfMenthol <- subset(subset(dfMenthol, padj < .05, select=c(log2FoldChange, padj)))
+  dfInter <- subset(subset(dfInter, padj < .05, select=c(log2FoldChange, padj)))
+  dfBoth <- merge(dfMenthol, dfVibrio, by=0, suffixes = c(".Menthol",".Vibrio"), all=TRUE)
+  rownames(dfBoth) <- dfBoth$Row.names
+  dfBoth <- subset(dfBoth, select = -c(Row.names) )
+  dfBoth <- merge(dfBoth, dfInter, by=0, all=TRUE)
+  rownames(dfBoth) <- dfBoth$Row.names
+  dfBoth <- subset(dfBoth, select = -c(Row.names) )
+  colnames(dfBoth) <- c("lfc.Menthol", "padj.Menthol", "lfc.Vibrio", "padj.Vibrio", "lfc.Inter", "padj.Inter")
+  dfBothAnnot <- merge(dfBoth, geneDesc,by=0, all.x=TRUE)
+  rownames(dfBothAnnot) <- dfBothAnnot$Row.names
+  dfBothAnnot <- subset(dfBothAnnot, select = -c(Row.names) )
+  upVibrio <- subset(dfBothAnnot, (padj.Vibrio < alpha) & (lfc.Vibrio > logThreshold))
+  downVibrio <- subset(dfBothAnnot, (padj.Vibrio < alpha) & (lfc.Vibrio < logThreshold))
+  upMenthol <- subset(dfBothAnnot, (padj.Menthol < alpha) & (lfc.Menthol > logThreshold))
+  downMenthol <- subset(dfBothAnnot, (padj.Menthol < alpha) & (lfc.Menthol < logThreshold))
+  upInter <- subset(dfBothAnnot, (padj.Inter < alpha) & (lfc.Inter > logThreshold))
+  downInter <- subset(dfBothAnnot, (padj.Inter < alpha) & (lfc.Inter < logThreshold))
+  upVibrio$count <- rep(1,nrow(upVibrio))
+  downVibrio$count <- rep(1, nrow(downVibrio))
+  upMenthol$count <- rep(1, nrow(upMenthol))
+  downMenthol$count <- rep(1, nrow(downMenthol))
+  upInter$count <- rep(1, nrow(upInter))
+  downInter$count <- rep(1, nrow(downInter))
+  vibrioCount <- merge(upVibrio, downVibrio, by=0, all=TRUE, suffixes=c("Up", "Down"))
+  mentholCount <- merge(upMenthol, downMenthol, by=0, all=TRUE, suffixes=c("Up", "Down"))
+  interCount <- merge(upInter, downInter, by=0, all=TRUE, suffixes=c("Up", "Down"))
+  rownames(vibrioCount) <- vibrioCount$Row.names
+  rownames(mentholCount) <- mentholCount$Row.names
+  rownames(interCount) <- interCount$Row.names
+  vibrioCount <- subset(vibrioCount, select = -c(Row.names) )
+  mentholCount <- subset(mentholCount, select = -c(Row.names) )
+  interCount <- subset(interCount, select = -c(Row.names) )
+  bothCount <- merge(vibrioCount, mentholCount, by=0, all=TRUE, suffixes=c("Vibrio", "Menthol"))
+  rownames(bothCount) <- bothCount$Row.names
+  bothCount <- subset(bothCount, select = -c(Row.names) )
+  bothCount <- merge(bothCount, interCount, by=0, all=TRUE)
+  rownames(bothCount) <- bothCount$Row.names
+  bothCount <- subset(bothCount, select = -c(Row.names) )
+  bothCount <- subset(bothCount, select = c(countUpVibrio, countDownVibrio, countUpMenthol, 
+                                          countDownMenthol, countUp, countDown) )
+  bothCount$countUpVibrio[is.na(bothCount$countUpVibrio)] <- 0
+  bothCount$countDownVibrio[is.na(bothCount$countDownVibrio)] <- 0
+  bothCount$countUpMenthol[is.na(bothCount$countUpMenthol)] <- 0
+  bothCount$countDownMenthol[is.na(bothCount$countDownMenthol)] <- 0
+  bothCount$countUp[is.na(bothCount$countUp)] <- 0
+  bothCount$countDown[is.na(bothCount$countDown)] <- 0
+  bothCount$gene = rownames(bothCount)
+  colnames(bothCount) = c("VibrioUp", "VibrioDown", "MentholUp", "MentholDown", "InteractionUp", "InteractionDown", "gene")
+  
+  listInput = list(UpVibrio = rownames(upVibrio), UpMenthol
+                   = rownames(upMenthol), DownVibrio=rownames(downVibrio), 
+                   DownMenthol=rownames(downMenthol), UpInteraction=rownames(upInter), 
+                   DownInteraction=rownames(downInter))
+  
+  returnList <- list("listInput" = listInput, "bothCount" = bothCount, 
+                     "ddsAll" = ddsAll, "dfBothAnnot" = dfBothAnnot)
+  return(returnList)
+}
+```
+
+**Differential Expression Summary**
+
+Figure 1 summarizes the differentially expressed genes for Vibrio, Menthol, Vibrio:Menthol interaction, and all observed set combinations of the three. The black bars indicate total differentially expressed genes, and the blue bars indicate differentially expressed genes for which a KEGG ortholog annotation was obtained.    
+
+```{r}
+bothCountNoAnnot <- runDE(tx2geneNoAnnot)$bothCount
+deList <- runDE(tx2gene)
+listInput <- deList$listInput
+ddsAll <- deList$ddsAll
+dfBothAnnot <- deList$dfBothAnnot
+```
+
+**Figure 1**
+
+```{r}
+annotatedGenes <- function(row) {
+  data <- (row["gene"] %in% tx2gene$Transcript)
+}
+upset(bothCountNoAnnot, sets = c("InteractionDown","InteractionUp","MentholDown",
+                                 "MentholUp", "VibrioDown","VibrioUp"), 
+      keep.order=TRUE, queries = list(list(query = annotatedGenes, color = "blue", 
+                                                                         active = T)))
+```
+
+**KEGG Pathway Enrichment Analysis**
+Enriched KEGG pathways were identified using GAGE [^Luo2009]. Table 1 lists pathways enriched for Vibrio or Menthol, excluding pathways KEGG categorizes as human disease specific. 
+
+```{r}
+keggPathways <- read.table("koToPathway.tsv", sep='\t', header=TRUE, quote='')
+keggPathways$PathDesc <- paste(keggPathways$Path, keggPathways$PathDesc)
+humanDiseasePaths <- c()
+pathCategories <- data.frame(PathDesc=character(), Category1=character(), Category=character()) 
+data1 <- fromJSON(file="http://www.kegg.jp/kegg-bin/download_htext?htext=br08901.keg&format=json&filedir=")
+for (node1 in data1$children){
+  for (node2 in node1$children){
+    for (node3 in node2$children){
+      pathName <- paste0("ko", node3$name)
+      pathName <- str_replace(pathName, "  ", " ")
+      newRow <- data.frame(PathDesc=pathName,Category1=node1$name, Category=node2$name)
+      pathCategories <- rbind(pathCategories,newRow)
+    }
+  }
+}
+keggPathways <- merge(keggPathways, pathCategories)
+totalCountsPath <- aggregate(Gene~PathDesc,FUN=length,data=unique(keggPathways))
+colnames(totalCountsPath) = c("PathDesc","Total")
+tx2geneAip <- read.csv("tx2gene.csv", header=FALSE)
+colnames(tx2geneAip) <- c("Aip", "Gene")
+aipCount <- length(unique(tx2geneAip$Gene))
+#cat("Aiptasia Pathway genes:", aipCount, "\n")
+inGenomeAip <- merge(keggPathways, tx2geneAip)
+inGenomeAip <- unique(subset(inGenomeAip, select=c("Gene", "PathDesc", "Category1", "Category")))
+write.csv(inGenomeAip, file='inGenomeAip.csv')
+genomeCountsAip <- aggregate(Gene~PathDesc+Category1+Category,FUN=length,data=inGenomeAip)
+colnames(genomeCountsAip) = c("PathDesc","Category1","Category","Aip")
+allPathCounts <- merge(totalCountsPath, genomeCountsAip, by='PathDesc',all.x=TRUE)
+allPathCounts$AipPct <-with(allPathCounts, Aip/Total)
+allPathCounts$AipPct <- sprintf("%1.1f", 100*allPathCounts$AipPct) 
+library("gage")
+library("gageData")
+data("kegg.sets.ko")
+exprs <- counts(ddsAll, normalized=TRUE)
+```
+
+```{r}
+vibrio <- rownames(colData[(colData$Vibrio == 'Vibrio') & (colData$Menthol == 'NoMenthol'),])
+noVibrio <- rownames(colData[colData$Vibrio == 'NoVibrio' & (colData$Menthol == 'NoMenthol'),])
+menthol <- rownames(colData[(colData$Menthol == 'Menthol') & (colData$Vibrio == 'NoVibrio'),])
+noMenthol <- rownames(colData[(colData$Menthol == 'NoMenthol') & (colData$Vibrio == 'NoVibrio'),])
+sampVibrio <- match(vibrio, colnames(exprs))
+sampMenthol <- match(menthol, colnames(exprs))
+refVibrio <- match(noVibrio, colnames(exprs))
+refMenthol <- match(noMenthol, colnames(exprs))
+```
+```{r}
+library("ggplot2")
+gageVibrioDif <- gage(exprs, kegg.sets.ko, ref=refVibrio, samp=sampVibrio, same.dir=FALSE)
+```
+```{r}
+gageMentholDif <- gage(exprs, kegg.sets.ko, ref=refMenthol, samp=sampMenthol, same.dir=FALSE)
+```
+```{r}
+vibrioDiff <- as.data.frame(gageVibrioDif$greater)
+vibrioDiff <- subset(vibrioDiff, q.val < .05, select=c("q.val"))
+colnames(vibrioDiff) <- c("VibrioEnriched")
+mentholDiff <- as.data.frame(gageMentholDif$greater)
+mentholDiff <- subset(mentholDiff,q.val < .05, select=c("q.val"))
+colnames(mentholDiff) <- c("MentholEnriched")
+both <- merge(vibrioDiff, mentholDiff, by=0, all=TRUE)
+rownames(both) <- both$Row.names
+both <- subset(both, select = -c(Row.names))
+both <- both[ order(both$VibrioEnriched),]
+```
+```{r}
+both <- merge(allPathCounts, both, by.x="PathDesc", by.y=0)
+rownames(both) <- both$PathDesc
+both <- subset(both, select =-c(PathDesc))
+both$MentholEnriched <- formatC(both$MentholEnriched, format = "e", digits = 2)
+both$VibrioEnriched <- formatC(both$VibrioEnriched, format = "e", digits = 2)
+deInPath <- length(rownames(dfBothAnnot))
+```
+```{r}
+for (pathway in rownames(both)){
+  genes <- unlist(kegg.sets.ko[pathway], use.names=FALSE)
+  dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% genes)
+  #write.csv(dfBothAnnotSearch, file=paste0('deByPathCsv/', pathway, '.csv'))
+  deInPath <- length(rownames(dfBothAnnotSearch))
+  upVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio > logThreshold))
+  downVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio < logThreshold))
+  upMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol > logThreshold))
+  downMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol < logThreshold))
+  upInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter > logThreshold))
+  downInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter < logThreshold))
+  listInput = list(UpVibrio = rownames(upVibrio), UpMenthol
+                   = rownames(upMenthol), DownVibrio=rownames(downVibrio), 
+                   DownMenthol=rownames(downMenthol), 
+                   UpInteraction=rownames(upInter), DownInteraction=rownames(downInter))
+    
+  upsetTable <- fromList(listInput)
+  both[pathway, "DE"] <- nrow(upsetTable)
+  
+  both[pathway, "V"] <- nrow(subset(upsetTable, (UpVibrio | DownVibrio) & !UpMenthol 
+                                     & !DownMenthol & !UpInteraction & !DownInteraction))
+
+  both[pathway, "M"] <- nrow(subset(upsetTable, !UpVibrio & !DownVibrio & (UpMenthol 
+                                     | DownMenthol) & !UpInteraction & !DownInteraction))
+
+  both[pathway, "Vu"] <- nrow(subset(upsetTable, UpVibrio & !UpMenthol 
+                                     & !DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VuT"] <- nrow(subset(upsetTable, UpVibrio > 0))
+  both[pathway, "VdT"] <- nrow(subset(upsetTable, DownVibrio > 0))
+  both[pathway, "MuT"] <- nrow(subset(upsetTable, UpMenthol > 0))
+  both[pathway, "MdT"] <- nrow(subset(upsetTable, DownMenthol > 0))
+  both[pathway, "Vd"] <- nrow(subset(upsetTable, DownVibrio 
+                                     & !UpMenthol & !DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "Mu"] <- nrow(subset(upsetTable, !UpVibrio 
+                                     & !DownVibrio & !UpMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "Md"] <- nrow(subset(upsetTable, !UpVibrio 
+                                     & !DownVibrio & !DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VuMu"] <- nrow(subset(upsetTable, UpVibrio 
+                                        & UpMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VdMd"] <- nrow(subset(upsetTable, DownVibrio 
+                                        & DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VuMd"] <- nrow(subset(upsetTable, UpVibrio 
+                                        & DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VdMu"] <- nrow(subset(upsetTable, DownVibrio 
+                                        & UpMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "Iu"] <- nrow(subset(upsetTable, !UpVibrio 
+                                     & !DownVibrio & !UpMenthol & !DownMenthol & UpInteraction))
+  both[pathway, "IuVu"] <- nrow(subset(upsetTable, UpVibrio 
+                                       & !UpMenthol & !DownMenthol & UpInteraction))
+  both[pathway, "IuVd"] <- nrow(subset(upsetTable, DownVibrio 
+                                       & !UpMenthol & !DownMenthol & UpInteraction))
+  both[pathway, "IuMu"] <- nrow(subset(upsetTable, UpMenthol 
+                                       & !UpVibrio & !DownVibrio & UpInteraction))
+  both[pathway, "IuMd"] <- nrow(subset(upsetTable, DownMenthol 
+                                       & !UpVibrio & !DownVibrio & UpInteraction))
+
+}
+#both$DE_Pct <- with(both, sprintf("%2.1f", 100*DE/Aip))
+both$DE_Pct <- with(both, 100*DE/Aip)
+both$V_Pct <- with(both, 100*V/Aip)
+both$M_Pct <- with(both, 100*M/Aip)
+both = subset(both, Category1 != "Human Diseases")
+both <- both[ order(-both$DE_Pct),]
+both$DE_Pct <- with(both, sprintf("%2.1f", DE_Pct))
+both$V_Pct <- with(both, sprintf("%2.1f", V_Pct))
+both$M_Pct <- with(both, sprintf("%2.1f", M_Pct))
+```
+```{r}
+table1 <- subset(both, select=c("Category", "VibrioEnriched", "MentholEnriched"))
+kable(table1, col.names = c("Category", "Vibrio-p", "Menthol-p"), caption="Enriched Pathways (GAGE)")
+```
+```{r}
+bothHtmlList = subset(both, select = c("Category", "VibrioEnriched", "MentholEnriched"))
+bothHtml = subset(both, select = c("Total", "Category", "Aip", "AipPct", 
+                               "VibrioEnriched", "MentholEnriched", "DE_Pct", "V_Pct", "M_Pct", "DE", "V", "M"))
+bothCsv = subset(both, select = c("Total", "Category", "Aip", "AipPct", 
+                               "VibrioEnriched", "MentholEnriched", "DE_Pct", "V_Pct", "M_Pct", "DE", "V", 
+                               "M", "VuT", "VdT", "MuT", "MdT","Vu", "Vd", "Mu", "Md", "VuMu", "VdMd", "VuMd",
+                               "VdMu", "Iu", "IuVu", "IuVd", "IuMu", "IuMd"))
+```
+```{r}
+thresh <- 3
+```
+
+
+**Differentially Expressed Genes by Pathway**
+
+Table 2 lists the pathways and the number of differentially expressed genes identified by DESeq2. The counts are separated into genes up-regulated for *Vibrio*, genes down-regulated for *Vibrio*, genes up-regulated for menthol, and genes down-regulated for menthol. A pathway was considered up for a condition if the up-regulated count exceeded the down-regulated count by more than `r I(thresh)`. A pathway was considered down for a condition if the down-regulated count exceeded the up-regulated count by more than `r I(thresh)`.     
+
+```{r}
+groupByDirection <- subset(bothCsv, select = c("Aip", "VuT", "VdT", "MuT", "MdT"))
+groupByDirection$group <- "Mixed"
+groupByDirection$group[groupByDirection$MuT > groupByDirection$MdT + thresh] <- "Up Menthol"
+groupByDirection$group[groupByDirection$VuT > groupByDirection$VdT + thresh] <- "Up Vibrio"
+groupByDirection$group[groupByDirection$VuT > groupByDirection$VdT + thresh & groupByDirection$MuT > groupByDirection$MdT + thresh] <- "Up Both"
+groupByDirection$group[groupByDirection$VuT + thresh < groupByDirection$VdT & groupByDirection$MuT + thresh < groupByDirection$MdT] <- "Down Both"
+groupByDirection$group[groupByDirection$VuT + thresh < groupByDirection$VdT & groupByDirection$MuT > groupByDirection$MdT + thresh] <- "Down Vibrio, Up Menthol"
+groupByDirection <- groupByDirection[order(groupByDirection$group, decreasing=TRUE),]
+kable(groupByDirection, caption = "DE Genes by Pathway (DESeq2)", col.names=c("Annot", "Up Vibrio", "Down Vibrio", "Up Menthol", "Down Menthol", "Group"))
+```
+
+```{r}
+write.csv(bothCsv, file='pathSummaryDE.csv')
+```
+
+```{r}
+groupByDirectionPct <- subset(bothCsv, select = c("Aip", "VuT", "VdT", "MuT", "MdT"))
+groupByDirectionPct$VuPct <- groupByDirectionPct$VuT/groupByDirectionPct$Aip
+groupByDirectionPct$VdPct <- groupByDirectionPct$VdT/groupByDirectionPct$Aip
+groupByDirectionPct$MuPct <- groupByDirectionPct$MuT/groupByDirectionPct$Aip
+groupByDirectionPct$MdPct <- groupByDirectionPct$MdT/groupByDirectionPct$Aip
+groupByDirectionPct$group <- "Mixed"
+groupByDirectionPct$group[groupByDirectionPct$VuPct > groupByDirectionPct$VdPct] <- "Up Vibrio"
+groupByDirectionPct$group[groupByDirectionPct$VuPct < groupByDirectionPct$VdPct] <- "Down Vibrio"
+groupByDirectionPct$group[groupByDirectionPct$group == "Up Vibrio" & 
+                            groupByDirectionPct$MuPct > groupByDirectionPct$MdPct] <- "Up Both"
+groupByDirectionPct$group[groupByDirectionPct$group == "Up Vibrio" & 
+                            groupByDirectionPct$MuPct < groupByDirectionPct$MdPct] <- "Up Vibrio Down Menthol"
+groupByDirectionPct$group[groupByDirectionPct$group == "Down Vibrio" & 
+                            groupByDirectionPct$MuPct > groupByDirectionPct$MdPct] <- "Down Vibrio Up Menthol"
+groupByDirectionPct$group[groupByDirectionPct$group == "Down Vibrio" & 
+                            groupByDirectionPct$MuPct < groupByDirectionPct$MdPct] <- "Down Vibrio Down Menthol"
+groupByDirectionPct <- subset(groupByDirectionPct, select = c("VuPct", "VdPct", "MuPct", "MdPct", "group"))
+groupByDirectionPct$MuPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*MuPct))
+groupByDirectionPct$VuPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*VuPct))
+groupByDirectionPct$MdPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*MdPct))
+groupByDirectionPct$VdPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*VdPct))
+groupByDirectionPct <- groupByDirectionPct[order(groupByDirectionPct$group, decreasing=FALSE),]
+kable(groupByDirectionPct)
+```
+
+```{r}
+pathByGroup <- function(group) {
+  cat("\n","##", group, "\n")
+  for (pathway in rownames(groupByDirection[groupByDirection$group == group,])){
+    cat("\n","###", pathway, "\n")
+    genes <- unlist(kegg.sets.ko[pathway], use.names=FALSE)
+    dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% genes, 
+                                select=c("GeneDesc", "lfc.Menthol", 
+                                         "padj.Menthol", "lfc.Vibrio", "padj.Vibrio"))
+    #print(kable(dfBothAnnotSearch))
+  }
+}
+```
+
+```{r}
+pathByName <- function(pathway) {
+  id <- unlist(strsplit(pathway, " "))[1]
+  diagram<-paste0("\n![",pathway,"](", id, ".pv.multi.png)")
+  cat(diagram)
+  genes <- unlist(kegg.sets.ko[pathway], use.names=FALSE)
+  dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% genes, 
+                              select=c("GeneDesc", "lfc.Menthol", 
+                                       "padj.Menthol", "lfc.Vibrio", "padj.Vibrio"))
+  pathExprs <- subset(dfBothAnnotSearch, select=c("lfc.Vibrio", "lfc.Menthol"))
+  annotatedGenes <- genes[genes %in% tx2geneAip$Gene & !(genes %in% rownames(pathExprs))]
+  for (gene in annotatedGenes){
+    addRow <- data.frame(row.names = c(gene), "lfc.Vibrio" = c(NA), "lfc.Menthol" = c(NA))
+    pathExprs <- rbind(pathExprs, addRow)
+  }
+  pathExprs[is.na(pathExprs)] <- 0
+  pv.out <- pathview(pathExprs, pathway.id = id, 
+                     species = "ko", kegg.dir="keggImages/", out.suffix = "pv",  
+                     keys.align = "y", kegg.native = T, match.data = F, 
+                     multi.state = T, same.layer = T, map.symbol=T, na.col = "gray", mid =
+                       list(gene = "white", cpd = "white"), low =
+                       list(gene = "blue", cpd = "blue"))
+  pathLfcTable <- subset(dfBothAnnotSearch, select=c("GeneDesc", "lfc.Menthol", "lfc.Vibrio"))
+  #print(kable(pathLfcTable))
+}
+```
+```{r}
+for (pathway in rownames(groupByDirection)){
+  pathByName(pathway)
+}
+```
+
+
+
+**References**
+
+[^Vollmer2008]: Vollmer SV, Kline DI. Natural Disease Resistance in Threatened
+Staghorn Corals. Bruno JF, ed. *PLoS ONE*. 2008;3(11):e3718.
+doi:10.1371/journal.pone.0003718.
+
+[^Libro2016]: Libro S, Vollmer SV. Genetic Signature of Resistance to White Band
+Disease in the Caribbean Staghorn Coral *Acropora cervicornis*. Melzner
+F, ed. *PLoS ONE*. 2016;11(1):e0146636.
+doi:10.1371/journal.pone.0146636.
+
+[^Libro2013]: Libro S, Kaluziak ST, Vollmer SV. RNA-seq Profiles of Immune
+Related Genes in the Staghorn Coral *Acropora cervicornis* Infected with
+White Band Disease. Söderhäll K, ed. *PLoS ONE*. 2013;8(11):e81821.
+doi:10.1371/journal.pone.0081821.
+
+[^Lõhelaid]: Lõhelaid H, Teder T, Tõldsepp K, Ekins M, Samel N. Up-Regulated
+Expression of *AOS-LOXa* and Increased Eicosanoid Synthesis in Response
+to Coral Wounding. Campbell DA, ed. *PLoS ONE*. 2014;9(2):e89215.
+doi:10.1371/journal.pone.0089215.
+
+[^Kline2011]: Kline DI, Vollmer SV. White Band Disease (type I) of Endangered
+Caribbean Acroporid Corals is Caused by Pathogenic Bacteria. *Scientific
+Reports*. 2011;1:7. doi:10.1038/srep00007.
+
+[^Li2010]: Li Y, Zhang Q, Zhang J, Wu L, Qi Y, Zhou J-M. Identification of
+MicroRNAs Involved in Pathogen-Associated Molecular Pattern-Triggered
+Plant Innate Immunity. *Plant Physiology*. 2010;152(4):2222-2231.
+doi:10.1104/pp.109.151803.
+
+[^Miller2007]: Miller DJ, Hemmrich G, Ball EE, et al. The innate immune repertoire
+in Cnidaria - ancestral complexity and stochastic gene loss. *Genome
+Biology*. 2007;8(4):R59. doi:10.1186/gb-2007-8-4-r59.
+
+[^Davy2012]: Davy SK, Allemand D, Weis VM. Cell Biology of
+Cnidarian-Dinoflagellate Symbiosis. *Microbiology and Molecular Biology
+Reviews : MMBR*. 2012;76(2):229-261. doi:10.1128/MMBR.05014-11.
+
+[^Detournay2012]: Detournay, O., Schnitzler, C. E., Poole, A., & Weis, V. M. (2012).
+Regulation of cnidarian–dinoflagellate mutualisms: Evidence that
+activation of a host TGFB innate immune pathway promotes tolerance of
+the symbiont. *Developmental and Comparative Immunology*, *38*(4),
+525–537. http://doi.org/10.1016/j.dci.2012.08.008
+
+[^Lehnert2014]: Lehnert EM, Mouchka ME, Burriesci MS, Gallo ND, Schwarz JA, Pringle
+JR. Extensive Differences in Gene Expression Between Symbiotic and
+Aposymbiotic Cnidarians. *G3: Genes|Genomes|Genetics*.
+2014;4(2):277-295. doi:10.1534/g3.113.009084.
+
+[^Carolina2015]: Email communication with Carolina Biological.
+
+[^Sunagawa2009]: Sunagawa, S., Wilson, E. C., Thaler, M., Smith, M. L., Caruso, C.,
+Pringle, J. R., … Schwarz, J. A. (2009). Generation and analysis of
+transcriptomic resources for a model system on the rise: the sea
+anemone *Aiptasia pallida* and its dinoflagellate endosymbiont. *BMC
+Genomics*, *10*, 258. http://doi.org/10.1186/1471-2164-10-258
+
+[^Zhu2005]: Zhu, Y., Thangamani, S., Ho, B., & Ding, J. L. (2005). The ancient
+origin of the complement system. *The EMBO Journal*, *24*(2), 382–394.
+http://doi.org/10.1038/sj.emboj.7600533
+
+[^Dishaw2005]: Dishaw, L. J., Smith, S. L., & Bigger, C. H. (2005).
+Characterization of a C3-like cDNA in a coral: phylogenetic
+implications. *Immunogenetics*, *57*(7), 535–548.
+http://doi.org/10.1007/s00251-005-0005-1
+
+[^Kimura2009]: Kimura, A., Sakaguchi, E., & Nonaka, M. (2009). Multi-component
+complement system of Cnidaria: C3, Bf, and MASP genes expressed in the
+endodermal tissues of a sea anemone, Nematostella vectensis.
+*Immunobiology*, *214*(3), 165–178.
+http://doi.org/10.1016/j.imbio.2009.01.003
+
+[^Weiss2013]: Weiss, Y., Forêt, S., Hayward, D. C., Ainsworth, T., King, R.,
+Ball, E. E., & Miller, D. J. (2013). The acute transcriptional response
+of the coral *Acropora millepora* to immune challenge: expression of
+GiMAP/IAN genes links the innate immune responses of corals with those
+of mammals and plants. *BMC Genomics*, *14*, 400.
+http://doi.org/10.1186/1471-2164-14-400
+
+[^Liu2008]: Liu, C., Wang, T., Zhang, W., & Li, X. (2008). Computational
+identification and analysis of immune-associated nucleotide gene family
+in Arabidopsis thaliana. *Journal of Plant Physiology*, *165*(7),
+777–787. http://doi.org/10.1016/j.jplph.2007.06.002
+
+[^Wang2009]: Wang, Z., & Li, X. (2009). IAN/GIMAPs are conserved and novel
+regulators in vertebrates and angiosperm plants. *Plant Signaling &
+Behavior*, *4*(3), 165–167.
+
+[^Yalaoui2008]: Yalaoui, S., Huby, T., Franetich, J.-F., Gego, A., Rametti, A.,
+Moreau, M., … Froissard, P. (2008). Scavenger receptor BI boosts
+hepatocyte permissiveness to Plasmodium infection. *Cell Host &
+Microbe*, *4*(3), 283–292. http://doi.org/10.1016/j.chom.2008.07.013
+
+[^Bolger2014]: Bolger, A. M., Lohse, M., & Usadel, B. (2014). Trimmomatic: A flexible trimmer for Illumina Sequence Data. Bioinformatics, btu170.
+
+[^Baumgarten2014]: Baumgarten, S., Simakov, O., Esherick, L. Y., Liew, Y. J., Lehnert, E. M., Michell, C. T., … Voolstra, C. R. (2015). The genome of <em>Aiptasia</em>, a sea anemone model for coral symbiosis. Proceedings of the National Academy of Sciences, 112(38), 11893. https://doi.org/10.1073/pnas.1513318112
+
+[^Patro2017]: Patro, R., Duggal, G., Love, M. I., Irizarry, R. A., & Kingsford, C. (2017). Salmon provides fast and bias-aware quantification of transcript expression. Nature Methods, 14, 417.
+
+[^Love2014]: Love, M. I., Huber, W., & Anders, S. (2014). Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biology, 15(12), 550. https://doi.org/10.1186/s13059-014-0550-8
+
+[^Soneson2015]: Soneson, C., Love, M. I., & Robinson, M. D. (2015). Differential analyses for RNA-seq: transcript-level estimates improve gene-level  inferences. F1000Research, 4, 1521. https://doi.org/10.12688/f1000research.7563.2
+
+[^UniProt2017]: UniProt: the universal protein knowledgebase. (2017). Nucleic Acids Research, 45(D1), D158–D169. https://doi.org/10.1093/nar/gkw1099
+
+[^NCBI2017]: NCBI Resource Coordinators. (2017). Database Resources of the National Center for Biotechnology Information. Nucleic Acids Research, 45(Database issue), D12–D17. https://doi.org/10.1093/nar/gkw1071
+
+[^Kanehisa2016]: Kanehisa, M., Sato, Y., Kawashima, M., Furumichi, M., & Tanabe, M. (2016). KEGG as a reference resource for gene and protein annotation. Nucleic Acids Research, 44(D1), D457–D462. https://doi.org/10.1093/nar/gkv1070
+
+[^Dani2016]: Dani, V., Priouzeau, F., Pagnotta, S., Carette, D., Laugier, J.-P., & Sabourault, C. (2016). Thermal and menthol stress induce different cellular events during sea anemone bleaching. Symbiosis, 69(3), 175–192. https://doi.org/10.1007/s13199-016-0406-y
+
+[^Luo2009]: Luo, W., Friedman, M. S., Shedden, K., Hankenson, K. D., & Woolf, P. J. (2009). GAGE: generally applicable gene set enrichment for pathway analysis. BMC Bioinformatics, 10(1), 161. https://doi.org/10.1186/1471-2105-10-161
+

@@ -1,0 +1,560 @@
+---
+title: "Aiptasia Immune Response"
+output:
+  md_document:
+    variant: gfm
+    df_print: paged
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+classoption: landscape
+editor_options: 
+  chunk_output_type: inline
+---
+```{r global_options, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, results='asis')
+```
+
+```{r Introduction, child = 'Intro.Rmd'}
+```
+```{r Introduction, child = 'Methods.Rmd'}
+```
+
+```{r}
+
+library("knitr")
+library("kableExtra")
+library("grid")
+library("UpSetR")
+library("stringr")
+library("gdata")
+library("tidyr")
+library("dplyr")
+library("knitr")
+library("pander")
+library("pheatmap")
+library("DESeq2")
+library("rjson")
+library("tximport")
+library("readr")
+library("Biostrings")
+library("pathview")
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+#source("http://faraway.neu.edu/data/Rprofile")
+#setwd("/Users/croesel/workspace/Aiptasia")
+```
+
+
+```{r}
+#Read in the Trimmomatic STDERR file
+trimLog <- read.table("trim.err", sep='\n', header=FALSE, quote='')
+#Get sample names
+sample <- str_match(trimLog$V1, "(Aip[0-9NA]{2})")[, 2]
+#Get input pairs
+input <- as.numeric(str_match(trimLog$V1, "Pairs: (.*?) ")[, 2])
+#Get output pairs
+passed <- as.numeric(str_match(trimLog$V1, "Surviving: (.*?) ")[, 2])
+#Get rid of NA
+sample <- sample[!is.na(sample)]
+passed <- passed[!is.na(passed)]
+input <- input[!is.na(input)]
+#Combine into data frame
+dfLog <- data.frame("Sample"=unlist(sample), "In"=unlist(input), "Out" =unlist(passed), stringsAsFactors = F)
+dfLog <- subset(dfLog, Sample != "AipNA")
+#Calculate percent passing quality filter
+dfLog$Percent <- with(dfLog, Out/In)
+```
+
+```{r}
+alpha <- .05
+logThreshold <- .05
+geneDesc <- read.table("koDesc.tsv", sep='\t', header=TRUE, quote='')
+rownames(geneDesc) = geneDesc$Gene
+geneDesc <- subset(geneDesc, select=c(GeneDesc))
+dna <- readDNAStringSet("epa.fasta")
+tx2geneNoAnnot <- data.frame(Transcript=names(dna), Gene=names(dna)) 
+tx2gene <- read.csv("epaToKo.csv", header=FALSE)
+colnames(tx2gene) <- c("Transcript", "Gene")
+dir <- 'Paired/quants_epa/'
+samples <- list.files(dir)
+files <- file.path(dir, samples, "quant.sf")
+```
+```{r}
+colData <- read.csv("Samples.csv", row.names=1)
+colData$Menthol <- gsub("Control","NoMenthol",colData$Menthol)
+colData$Vibrio <- gsub("Control","NoVibrio",colData$Vibrio)
+colData <- colData[with(colData, order(row.names(colData))), ]
+```
+```{r}
+counts.salmon <- tximport(files, type = "salmon", tx2gene=tx2geneNoAnnot)
+dfLog$Aligned <- unlist(colSums(counts.salmon$counts))
+dfLog$AlignedPct <- with(dfLog, Aligned/Out)
+dfLogAndCol <- merge(dfLog, colData, by.x="Sample", by.y=0)
+```
+
+
+```{r}
+dfAov <- subset(dfLogAndCol, select=c("Aligned", "Vibrio", "Menthol"))
+dfAov$Vibrio <- as.factor(dfAov$Vibrio)
+dfAov$Menthol <- as.factor(dfAov$Menthol)
+dfAov <- as.data.frame(dfAov)
+reads.aov <- aov(Aligned ~ Vibrio + Menthol + Vibrio:Menthol, dfAov)
+alignSumm <- summary(reads.aov)
+dfAlignSumm <- as.data.frame(unclass(alignSumm))
+```
+
+
+```{r}
+dfLogAndCol$Out <- prettyNum(dfLogAndCol$Out, big.mark=",", scientific=F)
+#Format percent
+dfLogAndCol$AlignedPct <- sprintf("%2.1f",100*dfLogAndCol$AlignedPct)
+dfLogAndCol$Percent <- sprintf("%2.1f",100*dfLogAndCol$Percent)
+#Format large numbers with comma separators
+dfLogAndCol$Aligned <- prettyNum(dfLogAndCol$Aligned, big.mark=",", scientific=F)
+dfLogAndCol$In <- prettyNum(dfLogAndCol$In, big.mark=",", scientific=F)
+kable(dfLogAndCol, col.names=c("Sample", "Read Pairs In", "Read Pairs Out", "Percent", "Aligned", "Aligned Percent", "Menthol", "Vibrio"), 
+      align=c(rep('r', 2), rep('r', 3), rep('r', 4)), caption="Read Trimming and Alignment Summary")
+
+```
+
+We performed two-way ANOVA on the counts of aligned reads, and found no significant differences or interactions based on Vibrio or Menthol exposure.   
+
+```{r}
+kable(dfAlignSumm, caption="Two-way ANOVA, read alignments")
+```
+
+```{r}
+runDE <- function(tx2gene){
+  txi.salmon <- tximport(files, type = "salmon", tx2gene=tx2gene)
+  ddsAll <- DESeqDataSetFromTximport(txi.salmon,
+                                     colData = colData,
+                                     design = ~ Vibrio + Menthol + Menthol:Vibrio)
+  ddsAll$Menthol <- relevel(ddsAll$Menthol, ref="NoMenthol")
+  ddsAll$Vibrio <- relevel(ddsAll$Vibrio, ref="NoVibrio")
+  ##Remove low counts
+  ddsAll <- ddsAll[ rowSums(counts(ddsAll)) > 10, ]
+  ##Run DESeq
+  ddsAll <- DESeq(ddsAll)
+  resVibrio <- results(ddsAll, alpha=.05, name="Vibrio_Vibrio_vs_NoVibrio")
+  resMenthol <- results(ddsAll, alpha=.05, name="Menthol_Menthol_vs_NoMenthol")
+  resInter <- results(ddsAll, alpha=.05, name="VibrioVibrio.MentholMenthol")
+  dfVibrio <- as.data.frame(resVibrio)
+  dfMenthol <- as.data.frame(resMenthol)
+  dfInter <- as.data.frame(resInter)
+  dfVibrio <- subset(subset(dfVibrio, padj < .05, select=c(log2FoldChange, padj)))
+  dfMenthol <- subset(subset(dfMenthol, padj < .05, select=c(log2FoldChange, padj)))
+  dfInter <- subset(subset(dfInter, padj < .05, select=c(log2FoldChange, padj)))
+  dfBoth <- merge(dfMenthol, dfVibrio, by=0, suffixes = c(".Menthol",".Vibrio"), all=TRUE)
+  rownames(dfBoth) <- dfBoth$Row.names
+  dfBoth <- subset(dfBoth, select = -c(Row.names) )
+  dfBoth <- merge(dfBoth, dfInter, by=0, all=TRUE)
+  rownames(dfBoth) <- dfBoth$Row.names
+  dfBoth <- subset(dfBoth, select = -c(Row.names) )
+  colnames(dfBoth) <- c("lfc.Menthol", "padj.Menthol", "lfc.Vibrio", "padj.Vibrio", "lfc.Inter", "padj.Inter")
+  dfBothAnnot <- merge(dfBoth, geneDesc,by=0, all.x=TRUE)
+  rownames(dfBothAnnot) <- dfBothAnnot$Row.names
+  dfBothAnnot <- subset(dfBothAnnot, select = -c(Row.names) )
+  upVibrio <- subset(dfBothAnnot, (padj.Vibrio < alpha) & (lfc.Vibrio > logThreshold))
+  downVibrio <- subset(dfBothAnnot, (padj.Vibrio < alpha) & (lfc.Vibrio < logThreshold))
+  upMenthol <- subset(dfBothAnnot, (padj.Menthol < alpha) & (lfc.Menthol > logThreshold))
+  downMenthol <- subset(dfBothAnnot, (padj.Menthol < alpha) & (lfc.Menthol < logThreshold))
+  upInter <- subset(dfBothAnnot, (padj.Inter < alpha) & (lfc.Inter > logThreshold))
+  downInter <- subset(dfBothAnnot, (padj.Inter < alpha) & (lfc.Inter < logThreshold))
+  upVibrio$count <- rep(1,nrow(upVibrio))
+  downVibrio$count <- rep(1, nrow(downVibrio))
+  upMenthol$count <- rep(1, nrow(upMenthol))
+  downMenthol$count <- rep(1, nrow(downMenthol))
+  upInter$count <- rep(1, nrow(upInter))
+  downInter$count <- rep(1, nrow(downInter))
+  vibrioCount <- merge(upVibrio, downVibrio, by=0, all=TRUE, suffixes=c("Up", "Down"))
+  mentholCount <- merge(upMenthol, downMenthol, by=0, all=TRUE, suffixes=c("Up", "Down"))
+  interCount <- merge(upInter, downInter, by=0, all=TRUE, suffixes=c("Up", "Down"))
+  rownames(vibrioCount) <- vibrioCount$Row.names
+  rownames(mentholCount) <- mentholCount$Row.names
+  rownames(interCount) <- interCount$Row.names
+  vibrioCount <- subset(vibrioCount, select = -c(Row.names) )
+  mentholCount <- subset(mentholCount, select = -c(Row.names) )
+  interCount <- subset(interCount, select = -c(Row.names) )
+  bothCount <- merge(vibrioCount, mentholCount, by=0, all=TRUE, suffixes=c("Vibrio", "Menthol"))
+  rownames(bothCount) <- bothCount$Row.names
+  bothCount <- subset(bothCount, select = -c(Row.names) )
+  bothCount <- merge(bothCount, interCount, by=0, all=TRUE)
+  rownames(bothCount) <- bothCount$Row.names
+  bothCount <- subset(bothCount, select = -c(Row.names) )
+  bothCount <- subset(bothCount, select = c(countUpVibrio, countDownVibrio, countUpMenthol, 
+                                          countDownMenthol, countUp, countDown) )
+  bothCount$countUpVibrio[is.na(bothCount$countUpVibrio)] <- 0
+  bothCount$countDownVibrio[is.na(bothCount$countDownVibrio)] <- 0
+  bothCount$countUpMenthol[is.na(bothCount$countUpMenthol)] <- 0
+  bothCount$countDownMenthol[is.na(bothCount$countDownMenthol)] <- 0
+  bothCount$countUp[is.na(bothCount$countUp)] <- 0
+  bothCount$countDown[is.na(bothCount$countDown)] <- 0
+  bothCount$gene = rownames(bothCount)
+  colnames(bothCount) = c("VibrioUp", "VibrioDown", "MentholUp", "MentholDown", "InteractionUp", "InteractionDown", "gene")
+  
+  listInput = list(UpVibrio = rownames(upVibrio), UpMenthol
+                   = rownames(upMenthol), DownVibrio=rownames(downVibrio), 
+                   DownMenthol=rownames(downMenthol), UpInteraction=rownames(upInter), 
+                   DownInteraction=rownames(downInter))
+  
+  returnList <- list("listInput" = listInput, "bothCount" = bothCount, 
+                     "ddsAll" = ddsAll, "dfBothAnnot" = dfBothAnnot)
+  return(returnList)
+}
+```
+
+
+```{r}
+deAllNoAnnot <- runDE(tx2geneNoAnnot)
+bothCountNoAnnot <- deAllNoAnnot$bothCount
+ddsAllNoAnnot <- deAllNoAnnot$ddsAll
+```
+
+```{r}
+deList <- runDE(tx2gene)
+listInput <- deList$listInput
+ddsAll <- deList$ddsAll
+dfBothAnnot <- deList$dfBothAnnot
+```
+```{r}
+ddsAllNoAnnot <- estimateSizeFactors(ddsAllNoAnnot)
+counts_norm_hell <- decostand(t(counts(ddsAllNoAnnot, normalized=TRUE)), "hell")
+```
+
+The transcript counts were imported into DESeq2 using tximport. The transcript-to-gene mapping and annotation file was created by aligning predicted coding sequences to Swiss-Prot using blastx. The Hellinger transformation was applied to the DESeq2-normalized read counts, and the tranformed counts were analyzed using PERMANOVA to identity transcriptome-wide differences in expression patterns.
+
+```{r PERMANOVA}
+counts_norm_hell <- decostand(t(counts(ddsAllNoAnnot, normalized=TRUE)), "hell")
+
+permanova <- adonis(counts_norm_hell ~ Vibrio * Menthol, 
+                     data = colData)
+kable(permanova$aov.tab, caption="Transcriptome-Wide Expression (PERMANOVA)")
+#kable_as_image(kable(permanova$aov.tab, format="latex"), filename = "PERMANOVA", file_format = "png",
+#  latex_header_includes = NULL, keep_pdf = TRUE, density = 600)
+```
+
+Multi-dimensional scaling (MDS) was performed to visually represent transcriptome-wide differences in gene expression.
+
+```{r}
+nmds_norm_hell <- metaMDS(comm = counts_norm_hell, autotransform = TRUE, 
+                          parallel = 48, trymax = 10^4, maxit = 10^4, expand=TRUE, trace=F)
+coords <- nmds_norm_hell$points
+phenos <- new("AnnotatedDataFrame", data=colData)
+env_all <- envfit(nmds_norm_hell, 
+                  env = subset(colData, 
+                               select = c("Vibrio", "Menthol")))
+```
+```{r MDS, fig.height = 10, fig.width = 10}
+
+vCoords <- coords[colData$Vibrio == "Vibrio" & colData$Menthol == "NoMenthol",]
+nvCoords <- coords[colData$Vibrio == "NoVibrio"& colData$Menthol == "NoMenthol",]
+mvCoords <- coords[colData$Vibrio == "Vibrio" & colData$Menthol == "Menthol",]
+mnvCoords <- coords[colData$Vibrio == "NoVibrio"& colData$Menthol == "Menthol",]
+xlab <- paste0("nMDS 1 (",sprintf("%2.1f",100*env_all$factors$r[1]),"%)")
+ylab <- paste0("nMDS 2 (",sprintf("%2.1f",100*env_all$factors$r[2]),"%)")
+plot(NA,NA, xlab = xlab, ylab = ylab, type = "n", xlim = c(-0.1, 0.1), ylim = c(-0.1, 0.1))
+points(mvCoords[, 1], mvCoords[, 2], col="red", pch=2)
+points(mnvCoords[, 1], mnvCoords[, 2], col="black", pch=2)
+points(nvCoords[, 1], nvCoords[, 2], col="black", pch=3)
+points(vCoords[, 1], vCoords[, 2], type = "p", col="red", pch=3)
+legend(-.1,-.05, c("Vibrio Menthol", "Vibrio No Menthol", "No Vibrio Menthol", "No Vibrio No Menthol"), pch=c(2, 3, 2, 3), col=c("red", "red", "black", "black"), cex=1)
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_hell, colData$Vibrio, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+ordiellipse(nmds_norm_hell, colData$Menthol, kind="se", conf=0.95, lwd=2, 
+            draw = "poly", col = c("blue"), alpha = 40, label = TRUE)
+
+ordiellipse(nmds_norm_hell, colData$Vibrio, kind="se", conf=0.95, lwd=2, 
+            draw = "poly", col = c("red"), alpha = 40, label = TRUE)
+```
+
+```{r}
+annotatedGenes <- function(row) {
+  data <- (row["gene"] %in% tx2gene$Transcript)
+}
+upset(bothCountNoAnnot, sets = c("InteractionDown","InteractionUp","MentholDown",
+                                 "MentholUp", "VibrioDown","VibrioUp"), 
+      keep.order=TRUE, queries = list(list(query = annotatedGenes, color = "blue", 
+                                                                         active = T)))
+```
+
+**KEGG Pathway Enrichment Analysis**
+Enriched KEGG pathways were identified using GAGE [^Luo2009]. Table 1 lists pathways enriched for Vibrio or Menthol, excluding pathways KEGG categorizes as human disease specific.
+
+```{r}
+keggPathways <- read.table("koToPathway.tsv", sep='\t', header=TRUE, quote='')
+keggPathways$PathDesc <- paste(keggPathways$Path, keggPathways$PathDesc)
+humanDiseasePaths <- c()
+pathCategories <- data.frame(PathDesc=character(), Category1=character(), Category=character()) 
+data1 <- fromJSON(file="http://www.kegg.jp/kegg-bin/download_htext?htext=br08901.keg&format=json&filedir=")
+for (node1 in data1$children){
+  for (node2 in node1$children){
+    for (node3 in node2$children){
+      pathName <- paste0("ko", node3$name)
+      pathName <- str_replace(pathName, "  ", " ")
+      newRow <- data.frame(PathDesc=pathName,Category1=node1$name, Category=node2$name)
+      pathCategories <- rbind(pathCategories,newRow)
+    }
+  }
+}
+keggPathways <- merge(keggPathways, pathCategories)
+totalCountsPath <- aggregate(Gene~PathDesc,FUN=length,data=unique(keggPathways))
+colnames(totalCountsPath) = c("PathDesc","Total")
+tx2geneAip <- read.csv("tx2gene.csv", header=FALSE)
+colnames(tx2geneAip) <- c("Aip", "Gene")
+aipCount <- length(unique(tx2geneAip$Gene))
+#cat("Aiptasia Pathway genes:", aipCount, "\n")
+inGenomeAip <- merge(keggPathways, tx2geneAip)
+inGenomeAip <- unique(subset(inGenomeAip, select=c("Gene", "PathDesc", "Category1", "Category")))
+write.csv(inGenomeAip, file='inGenomeAip.csv')
+genomeCountsAip <- aggregate(Gene~PathDesc+Category1+Category,FUN=length,data=inGenomeAip)
+colnames(genomeCountsAip) = c("PathDesc","Category1","Category","Aip")
+allPathCounts <- merge(totalCountsPath, genomeCountsAip, by='PathDesc',all.x=TRUE)
+allPathCounts$AipPct <-with(allPathCounts, Aip/Total)
+allPathCounts$AipPct <- sprintf("%1.1f", 100*allPathCounts$AipPct) 
+library("gage")
+library("gageData")
+data("kegg.sets.ko")
+exprs <- counts(ddsAll, normalized=TRUE)
+```
+
+```{r}
+vibrio <- rownames(colData[(colData$Vibrio == 'Vibrio') & (colData$Menthol == 'NoMenthol'),])
+noVibrio <- rownames(colData[colData$Vibrio == 'NoVibrio' & (colData$Menthol == 'NoMenthol'),])
+menthol <- rownames(colData[(colData$Menthol == 'Menthol') & (colData$Vibrio == 'NoVibrio'),])
+noMenthol <- rownames(colData[(colData$Menthol == 'NoMenthol') & (colData$Vibrio == 'NoVibrio'),])
+sampVibrio <- match(vibrio, colnames(exprs))
+sampMenthol <- match(menthol, colnames(exprs))
+refVibrio <- match(noVibrio, colnames(exprs))
+refMenthol <- match(noMenthol, colnames(exprs))
+```
+```{r}
+library("ggplot2")
+gageVibrioDif <- gage(exprs, kegg.sets.ko, ref=refVibrio, samp=sampVibrio, same.dir=FALSE)
+```
+```{r}
+gageMentholDif <- gage(exprs, kegg.sets.ko, ref=refMenthol, samp=sampMenthol, same.dir=FALSE)
+```
+```{r}
+vibrioDiff <- as.data.frame(gageVibrioDif$greater)
+vibrioDiff <- subset(vibrioDiff, q.val < .05, select=c("q.val"))
+colnames(vibrioDiff) <- c("VibrioEnriched")
+mentholDiff <- as.data.frame(gageMentholDif$greater)
+mentholDiff <- subset(mentholDiff,q.val < .05, select=c("q.val"))
+colnames(mentholDiff) <- c("MentholEnriched")
+both <- merge(vibrioDiff, mentholDiff, by=0, all=TRUE)
+rownames(both) <- both$Row.names
+both <- subset(both, select = -c(Row.names))
+both <- both[ order(both$VibrioEnriched),]
+```
+```{r}
+both <- merge(allPathCounts, both, by.x="PathDesc", by.y=0)
+rownames(both) <- both$PathDesc
+both <- subset(both, select =-c(PathDesc))
+both$MentholEnriched <- formatC(both$MentholEnriched, format = "e", digits = 2)
+both$VibrioEnriched <- formatC(both$VibrioEnriched, format = "e", digits = 2)
+deInPath <- length(rownames(dfBothAnnot))
+```
+
+
+```{r}
+pathSets <- list()
+dfPath <- data.frame()
+for (pathway in rownames(both)){
+  genes <- unlist(kegg.sets.ko[pathway], use.names=FALSE)
+  dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% genes)
+  pathSets[[pathway]] <- rownames(dfBothAnnotSearch)
+  for (gene in rownames(dfBothAnnotSearch)){
+    dfPath[gene, pathway] <- 1 
+  }
+  #write.csv(dfBothAnnotSearch, file=paste0('deByPathCsv/', pathway, '.csv'))
+  deInPath <- length(rownames(dfBothAnnotSearch))
+  upVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio > logThreshold))
+  downVibrio <- subset(dfBothAnnotSearch, (padj.Vibrio < alpha) & (lfc.Vibrio < logThreshold))
+  upMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol > logThreshold))
+  downMenthol <- subset(dfBothAnnotSearch, (padj.Menthol < alpha) & (lfc.Menthol < logThreshold))
+  upInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter > logThreshold))
+  downInter <- subset(dfBothAnnotSearch, (padj.Inter < alpha) & (lfc.Inter < logThreshold))
+  listInput = list(UpVibrio = rownames(upVibrio), UpMenthol
+                   = rownames(upMenthol), DownVibrio=rownames(downVibrio), 
+                   DownMenthol=rownames(downMenthol), 
+                   UpInteraction=rownames(upInter), DownInteraction=rownames(downInter))
+    
+  upsetTable <- fromList(listInput)
+  both[pathway, "DE"] <- nrow(upsetTable)
+  
+  both[pathway, "V"] <- nrow(subset(upsetTable, (UpVibrio | DownVibrio) & !UpMenthol 
+                                     & !DownMenthol & !UpInteraction & !DownInteraction))
+
+  both[pathway, "M"] <- nrow(subset(upsetTable, !UpVibrio & !DownVibrio & (UpMenthol 
+                                     | DownMenthol) & !UpInteraction & !DownInteraction))
+
+  both[pathway, "Vu"] <- nrow(subset(upsetTable, UpVibrio & !UpMenthol 
+                                     & !DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VuT"] <- nrow(subset(upsetTable, UpVibrio > 0))
+  both[pathway, "VdT"] <- nrow(subset(upsetTable, DownVibrio > 0))
+  both[pathway, "MuT"] <- nrow(subset(upsetTable, UpMenthol > 0))
+  both[pathway, "MdT"] <- nrow(subset(upsetTable, DownMenthol > 0))
+  both[pathway, "Vd"] <- nrow(subset(upsetTable, DownVibrio 
+                                     & !UpMenthol & !DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "Mu"] <- nrow(subset(upsetTable, !UpVibrio 
+                                     & !DownVibrio & !UpMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "Md"] <- nrow(subset(upsetTable, !UpVibrio 
+                                     & !DownVibrio & !DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VuMu"] <- nrow(subset(upsetTable, UpVibrio 
+                                        & UpMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VdMd"] <- nrow(subset(upsetTable, DownVibrio 
+                                        & DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VuMd"] <- nrow(subset(upsetTable, UpVibrio 
+                                        & DownMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "VdMu"] <- nrow(subset(upsetTable, DownVibrio 
+                                        & UpMenthol & !UpInteraction & !DownInteraction))
+  both[pathway, "Iu"] <- nrow(subset(upsetTable, !UpVibrio 
+                                     & !DownVibrio & !UpMenthol & !DownMenthol & UpInteraction))
+  both[pathway, "IuVu"] <- nrow(subset(upsetTable, UpVibrio 
+                                       & !UpMenthol & !DownMenthol & UpInteraction))
+  both[pathway, "IuVd"] <- nrow(subset(upsetTable, DownVibrio 
+                                       & !UpMenthol & !DownMenthol & UpInteraction))
+  both[pathway, "IuMu"] <- nrow(subset(upsetTable, UpMenthol 
+                                       & !UpVibrio & !DownVibrio & UpInteraction))
+  both[pathway, "IuMd"] <- nrow(subset(upsetTable, DownMenthol 
+                                       & !UpVibrio & !DownVibrio & UpInteraction))
+
+}
+#both$DE_Pct <- with(both, sprintf("%2.1f", 100*DE/Aip))
+both$DE_Pct <- with(both, 100*DE/Aip)
+both$V_Pct <- with(both, 100*V/Aip)
+both$M_Pct <- with(both, 100*M/Aip)
+both = subset(both, Category1 != "Human Diseases")
+both <- both[ order(-both$DE_Pct),]
+both$DE_Pct <- with(both, sprintf("%2.1f", DE_Pct))
+both$V_Pct <- with(both, sprintf("%2.1f", V_Pct))
+both$M_Pct <- with(both, sprintf("%2.1f", M_Pct))
+```
+
+```{r, fig.height = 10, fig.width = 10}
+  upsetPathwayTable <- fromList(pathSets)
+dfPath <- merge(geneDesc, dfPath,by=0)
+write.csv(dfPath, file="dfPath.csv")
+```
+```{r}
+  upset(upsetPathwayTable, sets = rownames(both))
+```
+
+```{r}
+table1 <- subset(both, select=c("Category", "VibrioEnriched", "MentholEnriched"))
+kable(table1, col.names = c("Category", "Vibrio-p", "Menthol-p"), caption="Enriched Pathways (GAGE)")
+```
+
+```{r}
+bothHtmlList = subset(both, select = c("Category", "VibrioEnriched", "MentholEnriched"))
+bothHtml = subset(both, select = c("Total", "Category", "Aip", "AipPct", 
+                               "VibrioEnriched", "MentholEnriched", "DE_Pct", "V_Pct", "M_Pct", "DE", "V", "M"))
+bothCsv = subset(both, select = c("Total", "Category", "Aip", "AipPct", 
+                               "VibrioEnriched", "MentholEnriched", "DE_Pct", "V_Pct", "M_Pct", "DE", "V", 
+                               "M", "VuT", "VdT", "MuT", "MdT","Vu", "Vd", "Mu", "Md", "VuMu", "VdMd", "VuMd",
+                               "VdMu", "Iu", "IuVu", "IuVd", "IuMu", "IuMd"))
+```
+```{r}
+thresh <- 3
+```
+
+\newpage
+
+```{r}
+groupByDirection <- subset(bothCsv, select = c("Aip", "VuT", "VdT", "MuT", "MdT"))
+#groupByDirection$group <- "Mixed"
+#groupByDirection$group[groupByDirection$MuT > groupByDirection$MdT + thresh] <- "Up Menthol"
+#groupByDirection$group[groupByDirection$VuT > groupByDirection$VdT + thresh] <- "Up Vibrio"
+#groupByDirection$group[groupByDirection$VuT > groupByDirection$VdT + thresh & groupByDirection$MuT > #groupByDirection$MdT + thresh] <- "Up Both"
+#groupByDirection$group[groupByDirection$VuT + thresh < groupByDirection$VdT & groupByDirection$MuT + thresh < groupByDirection$MdT] <- "Down Both"
+#groupByDirection$group[groupByDirection$VuT + thresh < groupByDirection$VdT & groupByDirection$MuT > groupByDirection$MdT + thresh] <- "Down Vibrio, Up Menthol"
+#groupByDirection <- groupByDirection[order(groupByDirection$group, decreasing=TRUE),]
+kable(groupByDirection, caption = "DE Genes by Pathway (DESeq2)", col.names=c("Annot", "Up Vibrio", "Down Vibrio", "Up Menthol", "Down Menthol"))
+```
+
+```{r}
+write.csv(bothCsv, file='pathSummaryDE.csv')
+```
+
+\newpage
+
+```{r}
+groupByDirectionPct <- subset(bothCsv, select = c("Aip", "VuT", "VdT", "MuT", "MdT"))
+groupByDirectionPct$VuPct <- groupByDirectionPct$VuT/groupByDirectionPct$Aip
+groupByDirectionPct$VdPct <- groupByDirectionPct$VdT/groupByDirectionPct$Aip
+groupByDirectionPct$MuPct <- groupByDirectionPct$MuT/groupByDirectionPct$Aip
+groupByDirectionPct$MdPct <- groupByDirectionPct$MdT/groupByDirectionPct$Aip
+groupByDirectionPct$group <- "Mixed"
+groupByDirectionPct$group[groupByDirectionPct$VuPct > groupByDirectionPct$VdPct] <- "Up Vibrio"
+groupByDirectionPct$group[groupByDirectionPct$VuPct < groupByDirectionPct$VdPct] <- "Down Vibrio"
+groupByDirectionPct$group[groupByDirectionPct$group == "Up Vibrio" & 
+                            groupByDirectionPct$MuPct > groupByDirectionPct$MdPct] <- "Up Both"
+groupByDirectionPct$group[groupByDirectionPct$group == "Up Vibrio" & 
+                            groupByDirectionPct$MuPct < groupByDirectionPct$MdPct] <- "Up Vibrio Down Menthol"
+groupByDirectionPct$group[groupByDirectionPct$group == "Down Vibrio" & 
+                            groupByDirectionPct$MuPct > groupByDirectionPct$MdPct] <- "Down Vibrio Up Menthol"
+groupByDirectionPct$group[groupByDirectionPct$group == "Down Vibrio" & 
+                            groupByDirectionPct$MuPct < groupByDirectionPct$MdPct] <- "Down Vibrio Down Menthol"
+groupByDirectionPct <- subset(groupByDirectionPct, select = c("VuPct", "VdPct", "MuPct", "MdPct", "group"))
+groupByDirectionPct$MuPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*MuPct))
+groupByDirectionPct$VuPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*VuPct))
+groupByDirectionPct$MdPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*MdPct))
+groupByDirectionPct$VdPct <- with(groupByDirectionPct, sprintf("%2.1f", 100*VdPct))
+groupByDirectionPct <- groupByDirectionPct[order(groupByDirectionPct$group, decreasing=FALSE),]
+kable(groupByDirectionPct, caption="Pathways Grouped by DE Direction")
+```
+
+```{r}
+pathByGroup <- function(group) {
+  cat("\n","##", group, "\n")
+  for (pathway in rownames(groupByDirection[groupByDirection$group == group,])){
+    cat("\n","###", pathway, "\n")
+    genes <- unlist(kegg.sets.ko[pathway], use.names=FALSE)
+    dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% genes, 
+                                select=c("GeneDesc", "lfc.Menthol", 
+                                         "padj.Menthol", "lfc.Vibrio", "padj.Vibrio"))
+    #print(kable(dfBothAnnotSearch))
+  }
+}
+```
+
+```{r}
+pathByName <- function(pathway) {
+  id <- unlist(strsplit(pathway, " "))[1]
+  diagram<-paste0("\n![",pathway,"](", id, ".pv.multi.png)")
+  cat(diagram)
+  genes <- unlist(kegg.sets.ko[pathway], use.names=FALSE)
+  dfBothAnnotSearch <- subset(dfBothAnnot, rownames(dfBothAnnot) %in% genes, 
+                              select=c("GeneDesc", "lfc.Menthol", 
+                                       "padj.Menthol", "lfc.Vibrio", "padj.Vibrio"))
+  pathExprs <- subset(dfBothAnnotSearch, select=c("lfc.Vibrio", "lfc.Menthol"))
+  annotatedGenes <- genes[genes %in% tx2geneAip$Gene & !(genes %in% rownames(pathExprs))]
+  for (gene in annotatedGenes){
+    addRow <- data.frame(row.names = c(gene), "lfc.Vibrio" = c(NA), "lfc.Menthol" = c(NA))
+    pathExprs <- rbind(pathExprs, addRow)
+  }
+  pathExprs[is.na(pathExprs)] <- 0
+  cat("\\newpage")
+  pv.out <- pathview(pathExprs, pathway.id = id, 
+                     species = "ko", kegg.dir="keggImages/", out.suffix = "pv",  
+                     keys.align = "y", kegg.native = T, match.data = F, 
+                     multi.state = T, same.layer = T, map.symbol=T, na.col = "gray", mid =
+                       list(gene = "white", cpd = "white"), low =
+                       list(gene = "blue", cpd = "blue"))
+  pathLfcTable <- subset(dfBothAnnotSearch, select=c("GeneDesc", "lfc.Menthol", "lfc.Vibrio"))
+  #print(kable(pathLfcTable))
+}
+```
+```{r}
+for (pathway in rownames(groupByDirection)){
+  #pathByName(pathway)
+}
+```

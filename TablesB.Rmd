@@ -1,0 +1,478 @@
+---
+title: "Tables"
+author: "Chuck Roesel"
+date: "4/14/2018"
+output:
+  pdf_document:
+    includes:
+      in_header: mainTables.tex
+      keep_tex: true
+  md_document:
+    variant: gfm
+    df_print: paged
+  html_document:
+    df_print: paged
+  word_document: default
+classoption: landscape
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, warning=FALSE, message=FALSE)
+library("knitr")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("kableExtra")
+library("pander")
+library(igraph)
+library(latexpdf)
+```
+
+```{r}
+permanovaTab <- read.csv("Tables/PERMANOVA.csv", row.names = 1)
+permanovaTab[is.na(permanovaTab)] <- ""
+kable(permanovaTab, caption="Transcriptome-Wide Expression (PERMANOVA)")
+```
+
+
+```{r}
+alpha <- .05
+barPlotTable <- read.csv("barPlotTable.csv", row.names = 1, stringsAsFactors = F)
+barPlotTable$PathDesc <- gsub(' pathway', '', barPlotTable$PathDesc)
+pathCategories <- read.csv("pathCategories.csv", row.names = 1, stringsAsFactors = F)
+pathCategories <- pathCategories %>% separate(PathDesc, c("Path", "PathDesc"), 8, remove=T)
+pathCategories$PathDesc <- gsub(' pathway', '', pathCategories$PathDesc)
+pathCategories$Path <- trimws(pathCategories$Path,which = c("both"))
+dfBestAllAnnotPath <- read.csv("dfBestAllAnnotPath.csv", row.names = 1, stringsAsFactors = F)
+dfBestAllAnnotPath$PathDesc <- gsub(' pathway', '', dfBestAllAnnotPath$PathDesc)
+deEither <- subset(dfBestAllAnnotPath, VibrioPadj < alpha |MentholPadj < alpha)
+deEitherAndCategory <- merge(deEither, pathCategories)
+deEitherAndCategory <- subset(deEitherAndCategory, PathDesc %in% barPlotTable$PathDesc)
+deCountByCategory <- aggregate(symbol ~ Category, data=deEitherAndCategory, FUN=NROW)
+deCountByCategory <- deCountByCategory[order(deCountByCategory$symbol, decreasing=T),]
+colnames(deCountByCategory) <- c("Category","CatDE")
+meanLFC <- subset(deEitherAndCategory, select=c("PathDesc", "Gene", "VibrioLFC", "VibrioPadj", "MentholLFC", "MentholPadj"))
+colnames(meanLFC) <- c("PathDesc", "Gene", "vLFC", "VibrioPadj", "mLFC", "MentholPadj")
+meanLFC$vLFC[meanLFC$VibrioPadj > .05] <- NA
+meanLFC$mLFC[meanLFC$MentholPadj > .05] <- NA
+meanLFCV <- aggregate(cbind(vLFC) ~ PathDesc,data=meanLFC, FUN=mean)
+meanLFCM <- aggregate(cbind(mLFC) ~ PathDesc,data=meanLFC, FUN=mean)
+meanLFC <- merge(meanLFCV, meanLFCM, all=T)
+colnames(meanLFC) <- c("Pathway", "vLFC", "mLFC")
+meanLFC$vLFC[is.na(meanLFC$vLFC)] <- 0
+meanLFC$mLFC[is.na(meanLFC$mLFC)] <- 0
+```
+
+\clearpage
+
+```{r}
+makeTable <- function(Filtered=T){
+  inFile <- "rawenrichedAndDE.csv"
+  enrichedAndDE <- read.csv(inFile, row.names = 1)
+  enrichedAndDE <- subset(enrichedAndDE, select=c("ID", "Pathway","Vibrio", "Menthol","pV", "pM",
+                                                  "Category", "Total", "DE","Up.Vibrio",
+                                                  "Down.Vibrio","Up.Menthol","Down.Menthol",
+                                                  "UpBoth",
+                                                  "DownBoth", "UpVDownM", "DownVUpM"
+  ))
+  enrichedAndDE$Pathway <- gsub(' pathway', '', enrichedAndDE$Pathway)
+  enrichedAndDE <- merge(meanLFC, enrichedAndDE)
+  enrichedAndDE <- unite(enrichedAndDE, "DE", c("DE","Total"), sep="/")
+#  colnames(enrichedAndDE) <- c("Path","vLFC","mLFC","ID","V","M","pV","pM","mRankV", 
+#                                                  "mRankM", "vRankV", "vRankM","Category","DE/Total", "V+","V-", "M+", "M-",
+#                               "V+M+","V-M-","V+M-","V-M+")
+  colnames(enrichedAndDE) <- c("Path","vLFC","mLFC","ID","V","M","pV","pM","Category","DE/Total", "V+","V-", "M+", "M-",
+                               "V+M+","V-M-","V+M-","V-M+")
+  enrichedAndDE <- merge(enrichedAndDE, deCountByCategory)
+  enrichedAndDE <- subset(enrichedAndDE, Path %in% barPlotTable$PathDesc)
+  enrichedAndDE$uVT <- rowSums(enrichedAndDE[, grep("V\\+", names(enrichedAndDE))])
+  enrichedAndDE$dVT <- rowSums(enrichedAndDE[, grep("V\\-", names(enrichedAndDE))])
+  enrichedAndDE$uMT <- rowSums(enrichedAndDE[, grep("M\\+", names(enrichedAndDE))])
+  enrichedAndDE$dMT <- rowSums(enrichedAndDE[, grep("M\\-", names(enrichedAndDE))])
+  enrichedAndDE$dirV <- enrichedAndDE$uVT - enrichedAndDE$dVT
+  enrichedAndDE$dirM <- enrichedAndDE$uMT - enrichedAndDE$dMT
+  enrichedAndDE$Path <- gsub(' pathway', '', enrichedAndDE$Path)
+  if(Filtered){
+    enrichedAndDE <- subset(enrichedAndDE, abs(enrichedAndDE$dirV) > 2 | abs(enrichedAndDE$dirM) > 2)
+  }
+  enrichedAndDE <- arrange(enrichedAndDE,desc(CatDE),desc(dirV),desc(dirM))
+  enrichedAndDE$V <- ''
+  enrichedAndDE$V[enrichedAndDE$pV <= .05] <- '*'
+  enrichedAndDE$V[enrichedAndDE$pV <= .01] <- '**'
+  enrichedAndDE$V[enrichedAndDE$pV <= .005] <- '***'
+  enrichedAndDE$M <- ''
+  enrichedAndDE$M[enrichedAndDE$pM <= .05] <- '*'
+  enrichedAndDE$M[enrichedAndDE$pM <= .01] <- '**'
+  enrichedAndDE$M[enrichedAndDE$pM <= .005] <- '***'
+  enrichedAndDE$dirV2 <- 'ns'
+  enrichedAndDE$dirV2[(enrichedAndDE$dirV > 2 & enrichedAndDE$pV <= .05)] <- 'up'
+  enrichedAndDE$dirV2[(enrichedAndDE$dirV < -2 & enrichedAndDE$pV <= .05)] <- 'down'
+  enrichedAndDE$dirV2[(abs(enrichedAndDE$dirV) <= 2 & enrichedAndDE$pV <= .05)] <- 'mixed'
+  enrichedAndDE$dirM2 <- 'ns'
+  enrichedAndDE$dirM2[(enrichedAndDE$dirM > 2 & enrichedAndDE$pM <= .05)] <- 'up'
+  enrichedAndDE$dirM2[(enrichedAndDE$dirM < -2 & enrichedAndDE$pM <= .05)] <- 'down'
+  enrichedAndDE$dirM2[(abs(enrichedAndDE$dirM) <= 2 & enrichedAndDE$pM <= .05)] <- 'mixed'
+  return(enrichedAndDE)
+}
+enrichedAndDE <- makeTable(F)
+enrichedAndDE2 <- subset(enrichedAndDE, select=c("ID", "Path", "V","M","DE/Total","dirV2","dirM2","uVT",
+                                                    "dVT", "uMT", "dMT"))
+#enrichedAndDE2
+```
+
+```{r enrichDeSummaryUnfiltered, results='asis', dev=c('pdf', 'svg')}
+#Create a latex table with kable
+kableIn <- kable(enrichedAndDE2, 
+                 caption="DE Genes in Pathways Enriched Vibrio and Menthol", digits=3, 
+                 format="latex", booktabs=T, longtable=T, row.names = F) %>% 
+  kable_styling(latex_options=c("striped", "repeat_header"), full_width = F) %>% 
+  add_header_above(c("Pathway" = 2, "Enrich" = 2,  
+                     "Differential Expression" = 6), align="l")%>% column_spec(2, width = "15em")
+#Loop through all categories and insert a header for each category
+for(category in unique(enrichedAndDE$Category)){
+  #Pass in the latex table and add one category header.
+  kableIn <- group_rows(kableIn, category, min(grep(category, enrichedAndDE$Category)), 
+                        max(grep(category, enrichedAndDE$Category)), hline_before = T,
+                        latex_gap_space = "0.3em")
+}
+print(kableIn)
+#rmarkdown::render(kableIn, file="test.pdf")
+fileConn<-file("deEnrichSummary.tex")
+writeLines(kableIn, fileConn)
+close(fileConn)
+#tex2pdf("deEnrichSummary.tex", stem = NULL, dir = NULL, clean = TRUE, onefile = FALSE)
+#latex(kableIn, file="deEnrichSummary.tex")
+#as.pdf(enrichedAndDE2, stem = "enrichDeSummary", dir = ".", clean = TRUE)
+#}
+```
+
+```{r}
+pathSummary <- data.frame()
+for (pathway1 in unique(deEitherAndCategory$PathDesc)){
+  for (pathway2 in unique(deEitherAndCategory$PathDesc)){
+    v1 <- subset(deEitherAndCategory, PathDesc == pathway1)
+    v2 <- subset(deEitherAndCategory, PathDesc == pathway2)
+    commonCount <- length(intersect(unique(v1$symbol), unique(v2$symbol)))
+    pathSummary[pathway1, pathway2] <-commonCount
+        if(pathway1 != pathway2){
+      if(commonCount > 0){
+        pathway1 <- gsub(' pathway', '', pathway1)
+        pathway2 <- gsub(' pathway', '', pathway2)
+      }
+    }
+  }
+}
+write.csv(pathSummary, file="pathSummary.csv")
+```
+
+```{r}
+deEitherAndCategory$PathDesc <- gsub(' pathway', '', deEitherAndCategory$PathDesc)
+iGraphData <- enrichedAndDE2 %>% separate('DE/Total', c("DE", "Total"), '/', remove=F)
+iGraphData$PercentDE <- as.integer(iGraphData$DE)/as.integer(iGraphData$Total)
+deEitherAndCategory$MentholLFC[deEitherAndCategory$MentholPadj > .05] <- NA
+deEitherAndCategory$VibrioLFC[deEitherAndCategory$VibrioPadj > .05] <- NA
+#deEitherAndCategory
+```
+
+```{r}
+dfNameSubstitution <- data.frame(longName=c(' signaling', 'Phosphatidylinositol system', 
+                                            'ECM-receptor interaction','Complement and coagulation cascades',
+                                            'Cytokine-cytokine receptor interaction',
+                                            'Cell adhesion molecules \\(CAMs\\)',
+                                            'Antigen processing and presentation', 'Toll-like receptor',
+                                            'RIG-I-like receptor','NOD-like receptor',
+                                            'Leukocyte transendothelial migration',
+                                            'Cytosolic DNA-sensing','Fc gamma R-mediated phagocytosis'), 
+                                 shortName=c('', 'PI', 'ECM', 'Comp','Cyto',
+                                             'CAMs','Antigen','Toll','RIG-I','NOD','Leukocyte',
+                                             'DNA-Sensing','Phagocytosis'), stringsAsFactors=FALSE)
+```
+
+
+```{r}
+highlightConnections <- function(pathway, category=NA, minWeight=1, excludeCat=NA, exposure){
+  network <- data.frame()
+  vertexA <- data.frame()
+  for (pathway1 in unique(iGraphData$Path)){
+    for (pathway2 in unique(iGraphData$Path)){
+      v1 <- subset(deEitherAndCategory, PathDesc == pathway1)
+      vertexA[pathway1, "color"] <- 'white'
+      if (enrichedAndDE2[enrichedAndDE2$Path == pathway1, exposure] == 'up'){
+        vertexA[pathway1, "color"] <- 'pink'
+      }
+      if (enrichedAndDE2[enrichedAndDE2$Path == pathway1, exposure] == 'down'){
+        vertexA[pathway1, "color"] <- 'light blue'
+      }
+      vertexA[pathway1, "size"] <- length(unique(v1$symbol))    
+      v2 <- subset(deEitherAndCategory, PathDesc == pathway2)
+      commonCount <- length(intersect(unique(v1$symbol), unique(v2$symbol)))
+      if(pathway1 != pathway2){
+        sharedGeneDE <- merge(v1, v2, by="Gene")
+        if(commonCount > 0){
+          write.csv(sharedGeneDE, file=paste0("debug/sharedGeneDE",pathway1, pathway2, '.csv'))
+          rowNum <- nrow(network) + 1
+          network[rowNum,"from"] <- pathway1
+          network[rowNum, "to"] <- pathway2
+          network[rowNum, "weight"] <- commonCount
+          network[rowNum, "color"] <- NA
+          network[rowNum, "vLFC"] <- mean(sharedGeneDE$VibrioLFC.x, na.rm = T)
+          network[rowNum, "mLFC"] <- mean(sharedGeneDE$MentholLFC.x, na.rm = T)
+        }
+      }
+    }
+  }
+  
+  subNetwork <- network
+  if(!is.na(category)){
+    byCategory <- unique(subset(deEitherAndCategory, Category==category, select=c("PathDesc")))
+    subNetwork <- subset(network, from %in% byCategory$PathDesc & to %in% byCategory$PathDesc & (weight >= minWeight)) 
+  }
+  if(!is.na(excludeCat)){
+    byCategory <- unique(subset(deEitherAndCategory, Category!=excludeCat, select=c("PathDesc")))
+    subNetwork <- subset(network, from %in% byCategory$PathDesc & to %in% byCategory$PathDesc & (weight >= minWeight)) 
+  }
+  if(exposure == 'dirV2'){
+    subNetwork$color[(subNetwork$vLFC > 0)] <- "red"
+    subNetwork$color[(subNetwork$vLFC < 0)] <- "blue"
+  }
+  if(exposure == 'dirM2'){
+    subNetwork$color[(subNetwork$mLFC > 0)] <- "red"
+    subNetwork$color[(subNetwork$mLFC < 0)] <- "blue"
+  }
+  if(pathway != 'All'){
+    subNetwork$color[subNetwork$from != pathway &  subNetwork$to != pathway] <- NA
+  }
+  write.csv(subNetwork, file=paste0('subNetwork', category, minWeight, '.csv'))
+  pathIGraph <- graph_from_data_frame(subNetwork, directed = F)
+  pathIGraph <- simplify( pathIGraph, remove.multiple = T, remove.loops = T, 
+                          edge.attr.comb=c(weight="mean", type="ignore", color="first") )
+  dfVertices <- as_data_frame(pathIGraph, what = c("vertices"))
+  dfEdges <- as_data_frame(pathIGraph, what = c("edges"))
+  dfVertices <- merge(dfVertices, vertexA, by=0)
+  for (row in 1:nrow(dfNameSubstitution)) {
+    long <- dfNameSubstitution[row, "longName"]
+    short  <- dfNameSubstitution[row, "shortName"]
+    dfEdges$from <- gsub(long,short,dfEdges$from)
+    dfEdges$to <- gsub(long,short,dfEdges$to)
+    dfVertices$name <- gsub(long,short,dfVertices$name)
+  }
+  rownames(dfVertices) <- dfVertices$name
+  dfVertices <- subset(dfVertices, select=-c(Row.names))
+  write.csv(dfVertices, file=paste0('dfVertices',exposure, '.csv'))
+  g <- graph_from_data_frame(dfEdges, directed=F, vertices=dfVertices)
+  E(g)$width <- E(g)$weight
+  return(g)
+  #plot(g, vertex.shape="circle", vertex.label.cex=2, layout=layout_in_circle)
+}
+```
+
+\clearpage
+
+```{r iGraphCircleAllV, fig.height=20, fig.width=20, fig.path='Figures/', fig.cap="Pathway Shared Genes Vibrio", dev=c('pdf', 'svg')}
+v <- highlightConnections("All", NA, 1, "Signal transduction", "dirV2")
+m <- highlightConnections("All", NA, 1, "Signal transduction", "dirM2")
+par(mfrow=c(1,2))
+plot(v, vertex.shape="circle", vertex.label.cex=2, layout=layout_in_circle)
+plot(m, vertex.shape="circle", vertex.label.cex=2, layout=layout_in_circle)
+```
+
+\clearpage
+
+```{r}
+interesting <- c("Immune system", "Signal transduction", "Transport and catabolism", "Lipid metabolism")
+#selectedPaths <- unique(subset(deEitherAndCategory, Category %in% interesting, select=c("PathDesc")))
+
+selectedPaths <- unique(subset(deEitherAndCategory, select=c("PathDesc")))
+
+#selectedPaths
+```
+```{r}
+mostOverlap <- data.frame()
+for (pathway in selectedPaths$PathDesc){
+  row <- pathSummary[pathway,]
+  row<-row[, order(colSums(-row))]
+  firstSim <- ''
+  secondSim <- ''
+  thirdSim <- ''
+  if(colSums(row[2]) > 0){
+    firstSim <- paste0(colnames(row[2]), ' (',colSums(row[2]),')')
+  }
+  if(colSums(row[3]) > 0){
+    secondSim <- paste0(colnames(row[3]), ' (',colSums(row[3]),')')
+  }
+  if(colSums(row[4]) > 0){
+    thirdSim <- paste0(colnames(row[4]), ' (',colSums(row[4]),')')
+  }
+  mostOverlap[pathway, "TopThree"] <- paste(firstSim, secondSim, thirdSim, sep=", ")
+}
+mostOverlap <- mostOverlap[order(mostOverlap$TopThree),,drop=F]
+mostOverlap$Path <- rownames(mostOverlap)
+#head(mostOverlap)
+```
+
+```{r}
+pathCountByGene <- aggregate(PathDesc ~ symbol, data=deEitherAndCategory, FUN=NROW)
+pathCountByGene$PathDesc <- gsub(' pathway', '', pathCountByGene$PathDesc)
+colnames(pathCountByGene) <- c("symbol", "PathCount")
+uniqueGenes <- subset(pathCountByGene, PathCount==1)
+pathwaysWithUniqueGenes <- merge(deEitherAndCategory, uniqueGenes)
+```
+```{r}
+uniqueGenePath <- subset(pathwaysWithUniqueGenes, 
+                             select=c("symbol", "PathDesc", "Category", 
+                                      "VibrioLFC", "MentholLFC"))
+uniqueGenePath <- uniqueGenePath[ order(uniqueGenePath$Category, 
+                                            uniqueGenePath$PathDesc, 
+                                            uniqueGenePath$symbol),]
+```
+
+```{r}
+uniqueCount <- aggregate(symbol ~ PathDesc, data = uniqueGenePath, FUN = NROW)
+uniqueCount$PathDesc <- gsub(' pathway', '', uniqueCount$PathDesc)
+colnames(uniqueCount) <- c("Path", "Unique")
+```
+
+```{r}
+write.csv(pathCountByGene, file="pathCountByGene.csv")
+sharedGenes <- subset(pathCountByGene, PathCount > 0)
+```
+```{r}
+pathwaysWithSharedGenes <- merge(deEitherAndCategory, sharedGenes)
+sharedGenePath <- subset(pathwaysWithSharedGenes, 
+                             select=c("symbol", "PathDesc", "Category", 
+                                      "VibrioLFC", "MentholLFC", "VibrioPadj", "MentholPadj"))
+sharedGenePath <- sharedGenePath[ order(sharedGenePath$Category, 
+                                            sharedGenePath$PathDesc, 
+                                            sharedGenePath$symbol),]
+```
+
+```{r}
+sharedCount <- aggregate(symbol ~ PathDesc, data = sharedGenePath, FUN = NROW)
+colnames(sharedCount) <- c("Path", "Shared")
+```
+
+```{r}
+pathDE <- aggregate(symbol ~ PathDesc, data=deEitherAndCategory, FUN=NROW)
+colnames(pathDE) <- c("Path", "DE")
+```
+
+```{r}
+uniqueList <- aggregate(symbol ~ PathDesc, data = uniqueGenePath, FUN = c)
+uniqueList$Symbols <- paste(uniqueList$symbol)
+uniqueList$Symbols <- gsub("c\\(","",uniqueList$Symbols)
+uniqueList$Symbols <- gsub("\\)","",uniqueList$Symbols)
+colnames(uniqueList) <- c("Path","symbol", "Unique Genes")
+uniqueList <- subset(uniqueList, select=-c(symbol))
+#head(uniqueList)
+```
+```{r}
+uniqueList <- uniqueList %>% mutate_all(funs(str_replace_all(., "\"", "")))
+uniqueList <- uniqueList %>% mutate_all(funs(str_replace_all(., "\"$", " ")))
+uniqueList <- uniqueList %>% mutate_all(funs(str_replace_all(., "\"", "")))
+#uniqueList <- uniqueList %>% mutate_all(funs(str_replace_all(., ", ", "/")))
+#head(uniqueList)
+```
+
+
+```{r}
+#deVibrioGenePath <- subset(sharedGenePath, VibrioPadj < alpha)
+sharedList <- aggregate(symbol ~ PathDesc, data = sharedGenePath, FUN = c)
+sharedList$Symbols <- paste(sharedList$symbol)
+sharedList$Symbols <- gsub("c\\(","",sharedList$Symbols)
+sharedList$Symbols <- gsub("\\)","",sharedList$Symbols)
+sharedList <- subset(sharedList,select=-c(symbol))
+```
+```{r}
+colnames(sharedList) <- c("Path","Shared Genes")
+sharedList <- sharedList %>% mutate_all(funs(str_replace_all(., "\"", "")))
+sharedList <- sharedList %>% mutate_all(funs(str_replace_all(., "\"$", " ")))
+sharedList <- sharedList %>% mutate_all(funs(str_replace_all(., "\"", "")))
+#sharedList <- sharedList %>% mutate_all(funs(str_replace_all(., ", ", "/")))
+sharedList$`Shared Genes` <- strtrim(sharedList$`Shared Genes`, 300)
+#head(sharedList)
+```
+
+\clearpage
+
+```{r}
+pathCategories$PathDesc <- gsub(' pathway','', pathCategories$PathDesc)
+```
+```{r}
+pathDE$Path <- gsub(' pathway', '', pathDE$Path)
+allSummary <- merge(mostOverlap, sharedCount, all.x=T)
+```
+```{r}
+allSummary <- merge(allSummary, uniqueCount, all.x=T)
+allSummary <- merge(allSummary, pathDE, all.x=T)
+allSummary <- merge(allSummary, uniqueList, all.x=T)
+allSummary <- merge(allSummary, sharedList, all.x=T)
+allSummary <- merge(allSummary, pathCategories,by.x="Path",by.y="PathDesc", all.x=T)
+allSummary <- merge(allSummary, deCountByCategory)
+#allSummary$Category <- paste0(allSummary$Category, '-', allSummary$symbol, '')
+#head(allSummary)
+colnames(allSummary) <- c("Category","PathDesc", "TopThree", "Shared", "Unique", "DE", "Unique Genes",
+                          "Shared Genes", "Path", "Category1", "CatDE")
+allSummary <- unite(allSummary, "PathDesc", c("Path","PathDesc"), sep=" ")
+allSummary[is.na(allSummary)] <- 0
+allSummary <- allSummary[order(allSummary$CatDE, decreasing=T),]
+allSummary2 <- subset(allSummary, select =c("PathDesc", "TopThree", "DE", "Shared", "Unique", "Unique Genes"))
+allSummary2$PathDesc <- gsub(" pathway", '', allSummary2$PathDesc)
+allSummary2$TopThree <- gsub(" pathway", '', allSummary2$TopThree)
+write.csv(allSummary, file="allSummary.csv")
+kableIn <- kable(allSummary2, caption="Pathway Summary", digits=0, 
+      format="latex",
+      booktabs=T, longtable=T, row.names = F) %>% 
+  kable_styling(latex_options=c("striped", "repeat_header"), 
+                full_width = F) %>% column_spec (1, width = "22em") %>% column_spec (2, width = "16em")%>% column_spec(6, width = "12em") 
+#head(allSummary)
+for(category in unique(allSummary$Category)){
+  startHdr <- min(grep(category, allSummary$Category))
+  endHdr <- max(grep(category, allSummary$Category))
+  #print(paste(startHdr, endHdr, sep=","))
+    kableIn <- group_rows(kableIn, category, startHdr,endHdr, hline_before = T,
+                        latex_gap_space = "0.3em")
+}
+```
+
+```{r, results='asis'}
+print(kableIn)
+```
+
+\clearpage
+
+```{r}
+sharedGenePathCatCount <- merge(sharedGenePath, deCountByCategory)
+```
+```{r}
+sharedGenePathList <- aggregate( PathDesc ~ symbol, sharedGenePathCatCount, function(x) toString(unique(x)))
+sharedGenePathCatCount <- unique(subset(sharedGenePathCatCount, 
+                                        select=c("symbol","VibrioLFC","MentholLFC","VibrioPadj",
+                                                 "MentholPadj")))
+sharedGenePathCatCount <-merge(sharedGenePathList, sharedGenePathCatCount, by="symbol")
+```
+```{r}
+sharedGenePathCatCount$Vibrio <- ''
+sharedGenePathCatCount$Menthol <- ''
+sharedGenePathCatCount$Vibrio[sharedGenePathCatCount$VibrioLFC >0 &
+                                sharedGenePathCatCount$VibrioPadj < alpha] <- "Up"
+sharedGenePathCatCount$Vibrio[sharedGenePathCatCount$VibrioLFC <0 &
+                                sharedGenePathCatCount$VibrioPadj < alpha] <- "Down"
+sharedGenePathCatCount$Menthol[sharedGenePathCatCount$MentholLFC >0 &
+                                sharedGenePathCatCount$MentholPadj < alpha] <- "Up"
+sharedGenePathCatCount$Menthol[sharedGenePathCatCount$MentholLFC <0 &
+                                sharedGenePathCatCount$MentholPadj < alpha] <- "Down"
+sharedGenePathCatCount <- subset(sharedGenePathCatCount, 
+                                 VibrioPadj < alpha | MentholPadj < alpha ,select=c("symbol", "Vibrio", "Menthol","PathDesc"))
+sharedGenePathCatCount <- sharedGenePathCatCount[order(sharedGenePathCatCount$Vibrio,
+                                                       sharedGenePathCatCount$Menthol, decreasing=T),]
+colnames(sharedGenePathCatCount) <- c("Gene", "Vibrio", "Menthol","PathDesc")
+sharedGenePathCatCount$PathDesc <- gsub(" pathway", '', sharedGenePathCatCount$PathDesc)
+
+#kable(sharedGenePathCatCount, caption="Genes and Pathways")
+kable(sharedGenePathCatCount, caption="Genes and Pathways", digits=0, 
+      format="latex",
+      booktabs=T, longtable=T, row.names = F) %>% 
+  kable_styling(latex_options=c("striped", "repeat_header"), 
+                full_width = F) %>% column_spec(4, width = "50em")
+```
+

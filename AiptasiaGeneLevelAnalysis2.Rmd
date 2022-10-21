@@ -1,0 +1,284 @@
+---
+title: "Aiptasia Gene Level Analysis 2"
+author: "Chuck Roesel"
+date: "3/24/2018"
+output:
+  pdf_document:
+    fig_caption: true
+  html_document:
+    df_print: paged
+  md_document:
+    variant: gfm
+    df_print: paged
+  word_document: default
+classoption: portrait
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaGeneLevelAnalysis.RData")
+```
+
+Differential expression, pathway enrichment, and annotations all merged are
+in genePath from AiptasiaGeneLevelAnalysis.Rmd. Find the genes unique to each pathway
+
+```{r}
+pathCountByGene <- aggregate(PathDesc ~ Symbols, data=genePath, FUN=NROW)
+colnames(pathCountByGene) <- c("Symbols", "PathCount")
+uniqueGenes <- subset(pathCountByGene, PathCount==1)
+pathwaysWithUniqueGenes <- merge(genePath, uniqueGenes)
+uniqueGenePath <- subset(pathwaysWithUniqueGenes, 
+                             select=c("Symbols", "PathDesc", "Category", 
+                                      "VibrioL2FC", "MentholL2FC"))
+uniqueGenePath <- uniqueGenePath[ order(uniqueGenePath$Category, 
+                                            uniqueGenePath$PathDesc, 
+                                            uniqueGenePath$Symbols),]
+```
+
+Write the unique genes and pathways as both csv and within the latex
+output. Where multiple symbols are listed separated by commas, the symbols are synonyms for the same gene.
+
+```{r}
+write.csv(uniqueGenePath, file="Tables/pathwaysWithUniqueGenes.csv")
+kable(uniqueGenePath, caption="Unique DE Genes by Pathways", digits=0, 
+      format="latex", row.names=F, longtable=T, 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down", "repeat_header")) %>%
+  row_spec(0)%>% landscape()
+
+```
+
+Get all pathways as a non-duplicated vector.
+
+```{r}
+allPathways <- unique(genePath$PathDesc)
+```
+
+Find the pathways with no unique genes. These don't need to be discussed because the genes within them are covered in other pathways.
+
+```{r}
+nonUnique <- setdiff(allPathways, uniqueGenePath$PathDesc)
+write.csv(nonUnique, file="Tables/pathwaysNoUniqueGenes.csv")
+kable(nonUnique, caption="Pathways Without Unique DE Genes", digits=0, 
+      format="latex", row.names=F, longtable=F, 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped")) %>%
+  row_spec(0)
+
+```
+
+Find the count of overlapping genes between pathways.
+
+```{r}
+
+pathComp <- data.frame()
+pathCompPct <- data.frame()
+for (pathway1 in unique(uniqueGenePath$PathDesc)){
+  for (pathway2 in unique(uniqueGenePath$PathDesc)){
+    v1 <- subset(genePath, PathDesc == pathway1)
+    v2 <- subset(genePath, PathDesc == pathway2)
+    commonCount <- length(intersect(unique(v1$KO), unique(v2$KO)))
+    unionCount <- length(union(unique(v1$KO), unique(v2$KO)))
+    percentCommon <- (commonCount/unionCount)*100
+    pathComp[pathway1, pathway2] <-commonCount 
+    pathCompPct[pathway1, pathway2] <-percentCommon
+  }
+}
+```
+
+Write the pathways and overlap percentages as both csv and latex output. The denominator for calculating percent overlap is the union of differentially expressed genes between the two pathways.
+
+```{r}
+write.csv(pathCompPct, file="pathCompPct.csv")
+kable(pathCompPct, caption="Percent Overlap between Pathways", digits=0, 
+      format="latex", booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)%>% landscape()
+```
+
+Write the pathways and overlap counts as both csv and latex output.
+
+```{r}
+write.csv(pathComp, file="pathComp.csv")
+kable(pathComp, caption="Gene Overlap between Pathways", digits=0, 
+      format="latex", booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)%>% landscape()
+
+```
+
+Show the genes that occurr in multiple pathways. The first + or - indicates Vibrio respose. The second + or - indicates menthol response. +/- means up for Vibrio, down for menthol. +/+ means up for both.
+upBothByPath
+```{r}
+multiPathGenes <- subset(pathCountByGene, PathCount > 1)
+geneByPath <- data.frame()
+upBothByPath <- data.frame()
+downBothByPath <- data.frame()
+oppositeByPath <- data.frame()
+upVibrio <- data.frame()
+downVibrio <- data.frame()
+upMenthol <- data.frame()
+downMenthol <- data.frame()
+for (pathway in unique(uniqueGenePath$PathDesc)){
+  genes <- subset(genePath, PathDesc == pathway)
+  for (row in 1:nrow(genes)) {
+    vibrio <- genes[row,"VibrioL2FC"]
+    menthol <- genes[row,"MentholL2FC"]
+    gene <- genes[row,"Symbols"]
+    vChar <- ''
+    mChar <- ''
+    if(!is.na(vibrio) & vibrio > 0){
+      vChar <- '+'
+    }
+    if(!is.na(vibrio) & vibrio < 0){
+      vChar <- '-'
+    }
+    if(!is.na(menthol) & menthol > 0){
+      mChar <- '+'
+    }
+    if(!is.na(menthol) & menthol < 0){
+      mChar <- '-'
+    }
+    cellString <- paste0(vChar, '/', mChar)
+    if(!is.na(menthol) & menthol > 0 & !is.na(vibrio) & vibrio > 0){
+      upBothByPath[gene, pathway] <- cellString
+    }
+    if(!is.na(menthol) & menthol < 0 & !is.na(vibrio) & vibrio < 0){
+      downBothByPath[gene, pathway] <- cellString
+    }
+    if(is.na(menthol) & !is.na(vibrio) & vibrio > 0){
+      upVibrio[gene, pathway] <- cellString
+    }
+    if(is.na(menthol) & !is.na(vibrio) & vibrio < 0){
+      downVibrio[gene, pathway] <- cellString
+    }
+    if(is.na(vibrio) & !is.na(menthol) & menthol > 0){
+      upMenthol[gene, pathway] <- cellString
+    }
+    if(is.na(vibrio) & !is.na(menthol) & menthol < 0){
+      downMenthol[gene, pathway] <- cellString
+    }
+    if(!is.na(menthol) & menthol > 0 & !is.na(vibrio) & vibrio < 0){
+      oppositeByPath[gene, pathway] <- cellString
+    }
+    if(!is.na(menthol) & menthol < 0 & !is.na(vibrio) & vibrio > 0){
+      oppositeByPath[gene, pathway] <- cellString
+    }
+    if(gene %in% multiPathGenes$Symbols){
+      geneByPath[gene, pathway] <- cellString
+    }
+  }
+}
+geneByPath[is.na(geneByPath)] <- ''
+kable(geneByPath, caption="Multi-Path DE Genes by Pathways", digits=0, 
+      format="latex", 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)
+
+```
+```{r}
+upBothByPath[is.na(upBothByPath)] <- ''
+kable(upBothByPath, caption="Up Vibrio and Menthol", digits=0, 
+      format="latex", 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)
+```
+```{r}
+oppositeByPath[is.na(oppositeByPath)] <- ''
+kable(oppositeByPath, caption="Vibrio and Menthol Opposite", digits=0, 
+      format="latex", 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)
+```
+
+```{r}
+downBothByPath[is.na(downBothByPath)] <- ''
+kable(downBothByPath, caption="Vibrio and Menthol Down", digits=0, 
+      format="latex",
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)
+```
+```{r}
+upVibrio[is.na(upVibrio)] <- ''
+kable(upVibrio, caption="Vibrio Up", digits=0, 
+      format="latex", 
+      booktabs=T, longtable=T) %>%
+  kable_styling(latex_options=c("striped"), full_width = F) %>%
+  row_spec(0, angle = 90) %>% landscape()
+```
+
+```{r}
+downVibrio[is.na(downVibrio)] <- ''
+kable(downVibrio, caption="Vibrio Down", digits=0, 
+      format="latex", 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)
+```
+
+```{r}
+downMenthol[is.na(downMenthol)] <- ''
+kable(downMenthol, caption="Menthol Down", digits=0, 
+      format="latex", 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)
+```
+
+```{r}
+upMenthol[is.na(upMenthol)] <- ''
+kable(upMenthol, caption="Menthol Up", digits=0, 
+      format="latex", 
+      booktabs=T) %>%
+  kable_styling(latex_options=c("striped","scale_down"), full_width = F) %>%
+  row_spec(0, angle = 90)
+```
+```{r}
+pathSummary <- data.frame()
+for (pathway1 in unique(genePath$PathDesc)){
+  for (pathway2 in unique(genePath$PathDesc)){
+    v1 <- subset(genePath, PathDesc == pathway1)
+    v2 <- subset(genePath, PathDesc == pathway2)
+    commonCount <- length(intersect(unique(v1$KO), unique(v2$KO)))
+    unionCount <- length(union(unique(v1$KO), unique(v2$KO)))
+    percentCommon <- (commonCount/unionCount)*100
+      pathSummary[pathway1, pathway2] <-percentCommon
+    if(pathway1 != pathway2){
+    }
+  }
+}
+```
+
+```{r}
+mostOverlap <- data.frame()
+for (pathway in rownames(pathSummary)){
+  #print("PATH")
+  #print(pathway)
+  row <- pathSummary[pathway,]
+  #print(colnames(row))
+  row<-row[, order(colSums(-row))]
+  #mostOverlap[pathway, "Self"] <- colnames(row[1])
+  mostOverlap[pathway, "First"] <- colnames(row[2])
+  mostOverlap[pathway, "Second"] <- colnames(row[3])
+  mostOverlap[pathway, "Third"] <- colnames(row[4])
+  #print(colnames(row[1]))
+ #mostOverlap[pathway,] <- colnames(row)
+}
+head(mostOverlap)
+```

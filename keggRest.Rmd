@@ -1,0 +1,125 @@
+---
+title: "keggRest"
+author: "Chuck Roesel"
+date: "5/3/2018"
+output:
+  pdf_document:
+    df_print: kable
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("KEGGREST")
+#library(KEGGREST)
+require(XML)
+library(xml2)
+library(dplyr)
+library(methods)
+library(tidyr)
+library(igraph)
+load("AiptasiaFigsAndTablesB.RData")
+```
+
+```{r}
+getLinks <- function(pathId){
+  idName <- data.frame()
+  idRels <- data.frame()
+  keggUrl <- paste0("http://rest.kegg.jp/get/",pathId,"/kgml")
+  data <- read_xml(keggUrl)
+  for (child in xml_children(data)){
+    id <- xml_attr(child, "id")
+    type <- xml_attr(child, "type")
+    if(!is.na(id) & type=='ortholog'){
+      idName[id,"id"] <- id
+      idName[id,"name"] <- xml_attr(child, "name")
+    }
+    if(type == 'GErel' | type == 'PPrel' ){
+      for(subChild in xml_children(child)){
+        rowNum <- nrow(idRels) + 1
+        idRels[rowNum, "entry1"] <- xml_attr(child, "entry1")
+        idRels[rowNum, "entry2"] <- xml_attr(child, "entry2")
+        idRels[rowNum, "type"] <- xml_attr(subChild, "name")
+      }
+    }else{
+    }
+  }
+  idName2 <- idName %>% 
+    mutate(name = strsplit(as.character(name), " ")) %>% 
+    unnest(name)
+  idName2$name <- gsub('ko:', '', idName2$name)
+  idName2 <- merge(dfBestAllAnnot, idName2, by.x = 0, by.y="name")
+  idName2 <- subset(idName2,VibrioPadj < .05, select=c("VibrioLFC", "symbol", "id"))
+  if(nrow(idName2) > 0 & nrow(idRels) > 0){
+  nameRels <- merge(idRels, idName2, by.x="entry1", by.y="id")
+  colnames(nameRels) <- c("entry1", "entry2", "type","VibrioLFC", "from")
+  nameRels <- merge(nameRels, idName2, by.x="entry2", by.y="id")
+  colnames(nameRels) <- c("entry2", "entry1", "color","lfcV1", "from", "lfcV2", "to")
+  nameRels <- subset(nameRels, select=c("from", "to","color", "lfcV1", "lfcV2"))
+  vertexA <- unique(subset(idName2, select=c("symbol", "VibrioLFC")))
+  colnames(vertexA) <- c("name", "color")
+  rownames(vertexA) <- vertexA$name
+  }
+  return(list(nameRels=nameRels, vertexA=vertexA))
+  }
+```
+```{r}
+barPlotTable <- read.csv("barPlotTable.csv", row.names = 1, stringsAsFactors = F)
+barPlotTable
+```
+```{r}
+vertexA <- NA
+nameRels <- NA
+firstPath <-T
+for (pathId in rownames(barPlotTable)){
+  pathLinks <- getLinks(pathId)
+  if(firstPath){
+    firstPath <- F
+    #vertexA <- pathLinks$vertexA
+    nameRels <- pathLinks$nameRels
+  }else{
+    #duprows <- rownames(vertexA) %in% rownames(pathLinks$vertexA)
+    #vertexA <- rbind(vertexA, pathLinks$vertexA[!duprows,])
+    nameRels <- rbind(nameRels, pathLinks$nameRels)
+  }
+}
+```
+```{r}
+vertexA
+```
+```{r}
+  pathIGraph <- graph_from_data_frame(nameRels, directed = T)
+  pathIGraph <- simplify( pathIGraph, remove.multiple = T, remove.loops = T, 
+                          edge.attr.comb=c(weight="mean", type="ignore", color="first") )
+  dfVertices <- as_data_frame(pathIGraph, what = c("vertices"))
+  #dfVertices <- merge(dfVertices, vertexA, all=T)
+  dfEdges <- as_data_frame(pathIGraph, what = c("edges"))
+  dfVertices2 <- data.frame(genes=unique(c(dfEdges$from, dfEdges$to)))
+  dfVertices2 <- merge(dfVertices, dfBestAllAnnot, by.x="name", by.y="symbol", all.x=T)
+  dfVertices2 <- subset(dfVertices2, VibrioPadj < .05, select=c("name", "VibrioLFC"))
+  rownames(dfVertices2) <- dfVertices2$name
+  colnames(dfVertices2) <- c("name", "color")
+  #dfEdges$width <- 2
+  dfEdges$color[dfEdges$color=='activation'] <- 'red'
+  dfEdges$color[dfEdges$color=='phosphorylation'] <- 'orange'
+  dfEdges$color[dfEdges$color=='ubiquitination'] <- 'green'
+  dfEdges$color[dfEdges$color=='binding/association'] <- 'yellow'
+  dfEdges$color[dfEdges$color=='inhibition'] <- 'blue'
+  dfEdges$color[dfEdges$color=='compound'] <- 'black'
+  dfEdges$color[dfEdges$color=='dissociation'] <- 'purple'
+  dfEdges$color[dfEdges$color=='indirect effect'] <- 'pink'
+  dfVertices2$color[dfVertices2$color > 0] <- 'pink'
+  dfVertices2$color[dfVertices2$color < 0] <- 'light blue'
+  rownames(dfVertices2) <- dfVertices2$name
+  g <- graph_from_data_frame(dfEdges, directed=F, vertices=dfVertices2)
+```
+
+```{r tollPath, fig.height=20, fig.width=20, fig.path='Figures/', fig.cap="Complement iGraph", dev=c('pdf', 'svg')}
+
+  plot(g, vertex.shape="circle", vertex.label.cex=2, layout=layout_nicely, edge.width=4, edge.length=10)
+
+```

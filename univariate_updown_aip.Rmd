@@ -1,0 +1,1000 @@
+---
+title: "Univariate microbial abundance analysis"
+author: "Tarik C. Gouhier"
+date: "6/22/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+setwd("~/Dropbox/AiptasiaR")
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+```
+
+## Summary of approach
+
+I counted the number of significantly up and down 'regulated' OTUs across the 
+different treatments for each time step and then generated a table summarizing
+those numbers at different phylogenetic levels.
+
+## Timestep T0
+```{r echo=FALSE}
+#load("univariate_updown_data.RData")
+load("univariate_glm_t0_metagenomeSeq_quasipoisson.RData")
+
+ counts_merged <- data.frame(treatment = rownames(t(counts_norm)),
+                                t(counts_norm))
+ counts_merged <- merge(data.frame(treatment = rownames(phenos), phenos),
+                           counts_merged, all.y = TRUE)
+ counts_merged_long <- reshape(counts_merged,
+                                  times = colnames(counts_merged[, 8:ncol(counts_merged)]),
+                                  varying = list(8:ncol(counts_merged)),
+                                  idvar = c("treatment", "times", "antibiotic",
+                                            "exposure_one", "exposure_two",
+                                            "genotype", "tank"),
+                                  v.names = "abundance",
+                                  direction = "long")
+ colnames(counts_merged_long)[8] <- "GeneName"
+ merged_counts_merged_long <- merge(counts_merged_long, annots, all.x = TRUE)
+ # Identify different taxonomic groups
+ phylum <- sapply(strsplit(x = merged_counts_merged_t0_long$phylum,
+                           split = "[^a-zA-Z]"), "[", 2)
+ class <- sapply(strsplit(x = merged_counts_merged_t0_long$class,
+                          split = "[^a-zA-Z]"), "[", 2)
+ order <- sapply(strsplit(x = merged_counts_merged_t0_long$order,
+                          split = "[^a-zA-Z]"), "[", 2)
+ family <- sapply(strsplit(x = merged_counts_merged_t0_long$family,
+                           split = "[^a-zA-Z]"), "[", 2)
+ genus <- sapply(strsplit(x = merged_counts_merged_t0_long$genus,
+                          split = "[^a-zA-Z]"), "[", 2)
+ # Reclassify NAs as unknowns
+ phylum[is.na(phylum)] <- "Unknown"
+ class[is.na(class)] <- "Unknown"
+ order[is.na(order)] <- "Unknown"
+ family[is.na(family)] <- "Unknown"
+ genus[is.na(genus)] <- "Unknown"
+ merged_counts_merged_t0_long$phylum <- phylum
+ merged_counts_merged_t0_long$class <- class
+ merged_counts_merged_t0_long$order <- order
+ merged_counts_merged_t0_long$family <- family
+ merged_counts_merged_t0_long$genus <- genus
+
+# df_T0 <- read.csv(file = "otu_all_t0_metagenomeSeq_quasipoisson.csv")
+# df_T2 <- read.csv(file = "otu_all_t2_metagenomeSeq_quasipoisson.csv")
+# df_T3 <- read.csv(file = "otu_all_t3_metagenomeSeq_quasipoisson.csv")
+# 
+# # ---- T0 ----
+# # Identify different taxonomic groups
+# phylum <- sapply(strsplit(x = df_T0$phylum, 
+#                           split = "[^a-zA-Z]"), "[", 2)
+# class <- sapply(strsplit(x = df_T0$class, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# order <- sapply(strsplit(x = df_T0$order, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# family <- sapply(strsplit(x = df_T0$family, 
+#                           split = "[^a-zA-Z]"), "[", 2)
+# genus <- sapply(strsplit(x = df_T0$genus, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# # Reclassify NAs as unknowns
+# phylum[is.na(phylum)] <- "Unknown"
+# class[is.na(class)] <- "Unknown"
+# order[is.na(order)] <- "Unknown"
+# family[is.na(family)] <- "Unknown"
+# genus[is.na(genus)] <- "Unknown"
+# 
+# df_T0$phylum <- phylum
+# df_T0$class <- class
+# df_T0$order <- order
+# df_T0$family <- family
+# df_T0$genus <- genus
+# 
+# # ---- T2 ----
+# # Identify different taxonomic groups
+# phylum <- sapply(strsplit(x = df_T2$phylum, 
+#                           split = "[^a-zA-Z]"), "[", 2)
+# class <- sapply(strsplit(x = df_T2$class, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# order <- sapply(strsplit(x = df_T2$order, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# family <- sapply(strsplit(x = df_T2$family, 
+#                           split = "[^a-zA-Z]"), "[", 2)
+# genus <- sapply(strsplit(x = df_T2$genus, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# # Reclassify NAs as unknowns
+# phylum[is.na(phylum)] <- "Unknown"
+# class[is.na(class)] <- "Unknown"
+# order[is.na(order)] <- "Unknown"
+# family[is.na(family)] <- "Unknown"
+# genus[is.na(genus)] <- "Unknown"
+# 
+# df_T2$phylum <- phylum
+# df_T2$class <- class
+# df_T2$order <- order
+# df_T2$family <- family
+# df_T2$genus <- genus
+# 
+# # ---- T3 ----
+# # Identify different taxonomic groups
+# phylum <- sapply(strsplit(x = df_T3$phylum, 
+#                           split = "[^a-zA-Z]"), "[", 2)
+# class <- sapply(strsplit(x = df_T3$class, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# order <- sapply(strsplit(x = df_T3$order, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# family <- sapply(strsplit(x = df_T3$family, 
+#                           split = "[^a-zA-Z]"), "[", 2)
+# genus <- sapply(strsplit(x = df_T3$genus, 
+#                          split = "[^a-zA-Z]"), "[", 2)
+# # Reclassify NAs as unknowns
+# phylum[is.na(phylum)] <- "Unknown"
+# class[is.na(class)] <- "Unknown"
+# order[is.na(order)] <- "Unknown"
+# family[is.na(family)] <- "Unknown"
+# genus[is.na(genus)] <- "Unknown"
+# 
+# df_T3$phylum <- phylum
+# df_T3$class <- class
+# df_T3$order <- order
+# df_T3$family <- family
+# df_T3$genus <- genus
+
+```
+
+### Phylum
+
+Number of OTUs that are significantly up vs. down regulated in +Antibiotic vs. -Antibiotic
+treatments aggregated at the phylum level. Upregulation means that OTU abundance is greater
+with than without antibiotics:
+
+```{r echo=FALSE}
+alpha <- 0.05
+delta <- 1
+sig_OTUs <- df_T0[df_T0$pval.antibiotic.fdr < alpha, "OTUname"]
+sig_T0_phylum <- aggregate(pval.antibiotic.fdr ~ phylum,
+                              FUN = function(x) sum(x < alpha), data = df_T0)
+colnames(sig_T0_phylum)[ncol(sig_T0_phylum)] <- "signif"
+updown_T0_MinusA <- aggregate(abundance ~ phylum + class + order + family + genus + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t0_long, 
+                                                   antibiotic == "MinusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_MinusA)[ncol(updown_T0_MinusA)] <- "abund.MinusA"
+updown_T0_PlusA <- aggregate(abundance ~ phylum + class + order + family + genus,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t0_long, 
+                                                  antibiotic == "PlusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_PlusA)[ncol(updown_T0_PlusA)] <- "abund.PlusA"
+merged_updown_T0 <- merge(updown_T0_MinusA, updown_T0_PlusA)
+merged_updown_T0$logRatio <- log2((merged_updown_T0$abund.PlusA + delta) / (merged_updown_T0$abund.MinusA + delta))
+up_T0_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T0, FUN = function(x) sum(x > 0))
+colnames(up_T0_phylum)[ncol(up_T0_phylum)] <- "antibiotic.up"
+down_T0_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T0, FUN = function(x) sum(x < 0))
+colnames(down_T0_phylum)[ncol(down_T0_phylum)] <- "antibiotic.down"
+
+merged_sig_updown_T0_phylum <- merge(down_T0_phylum, up_T0_phylum, all = TRUE)
+merged_sig_updown_T0_phylum <- merge(sig_T0_phylum, merged_sig_updown_T0_phylum, all = TRUE)
+write.csv(merged_sig_updown_T0_phylum, file = "updown_phylum_T0_antibiotics.csv")
+kable(merged_sig_updown_T0_phylum)
+
+```
+
+### Class
+
+Number of OTUs that are significantly up vs. down regulated in +Antibiotic vs. -Antibiotic
+treatments aggregated at the class level. Upregulation means that OTU abundance is greater
+with than without antibiotics:
+
+
+```{r echo=FALSE}
+alpha <- 0.05
+delta <- 1
+sig_OTUs <- df_T0[df_T0$pval.antibiotic.fdr < alpha, "OTUname"]
+sig_T0_class <- aggregate(pval.antibiotic.fdr ~ class,
+                              FUN = function(x) sum(x < alpha), data = df_T0)
+colnames(sig_T0_class)[ncol(sig_T0_class)] <- "signif"
+updown_T0_MinusA <- aggregate(abundance ~ class + class + order + family + genus + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t0_long, 
+                                                   antibiotic == "MinusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_MinusA)[ncol(updown_T0_MinusA)] <- "abund.MinusA"
+updown_T0_PlusA <- aggregate(abundance ~ class + class + order + family + genus,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t0_long, 
+                                                  antibiotic == "PlusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_PlusA)[ncol(updown_T0_PlusA)] <- "abund.PlusA"
+merged_updown_T0 <- merge(updown_T0_MinusA, updown_T0_PlusA)
+merged_updown_T0$logRatio <- log2((merged_updown_T0$abund.PlusA + delta) / (merged_updown_T0$abund.MinusA + delta))
+up_T0_class <- aggregate(logRatio ~ class, data = merged_updown_T0, FUN = function(x) sum(x > 0))
+colnames(up_T0_class)[ncol(up_T0_class)] <- "antibiotic.up"
+down_T0_class <- aggregate(logRatio ~ class, data = merged_updown_T0, FUN = function(x) sum(x < 0))
+colnames(down_T0_class)[ncol(down_T0_class)] <- "antibiotic.down"
+
+merged_sig_updown_T0_class <- merge(down_T0_class, up_T0_class, all = TRUE)
+merged_sig_updown_T0_class <- merge(sig_T0_class, merged_sig_updown_T0_class, all = TRUE)
+write.csv(merged_sig_updown_T0_class, file = "updown_class_T0_antibiotics.csv")
+kable(merged_sig_updown_T0_class)
+
+```
+
+### Family
+
+Number of OTUs that are significantly up vs. down regulated in +Antibiotic vs. -Antibiotic
+treatments aggregated at the family level. Upregulation means that OTU abundance is greater
+with than without antibiotics:
+
+
+```{r echo=FALSE}
+sig_OTUs <- df_T0[df_T0$pval.antibiotic.fdr < alpha, "OTUname"]
+sig_T0_family <- aggregate(pval.antibiotic.fdr ~ family,
+                              FUN = function(x) sum(x < alpha), data = df_T0)
+colnames(sig_T0_family)[ncol(sig_T0_family)] <- "signif"
+updown_T0_MinusA <- aggregate(abundance ~ family + family + order + family + genus + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t0_long, 
+                                                   antibiotic == "MinusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_MinusA)[ncol(updown_T0_MinusA)] <- "abund.MinusA"
+updown_T0_PlusA <- aggregate(abundance ~ family + family + order + family + genus,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t0_long, 
+                                                  antibiotic == "PlusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_PlusA)[ncol(updown_T0_PlusA)] <- "abund.PlusA"
+merged_updown_T0 <- merge(updown_T0_MinusA, updown_T0_PlusA)
+merged_updown_T0$logRatio <- log2((merged_updown_T0$abund.PlusA + delta) / (merged_updown_T0$abund.MinusA + delta))
+up_T0_family <- aggregate(logRatio ~ family, data = merged_updown_T0, FUN = function(x) sum(x > 0))
+colnames(up_T0_family)[ncol(up_T0_family)] <- "antibiotic.up"
+down_T0_family <- aggregate(logRatio ~ family, data = merged_updown_T0, FUN = function(x) sum(x < 0))
+colnames(down_T0_family)[ncol(down_T0_family)] <- "antibiotic.down"
+
+merged_sig_updown_T0_family <- merge(down_T0_family, up_T0_family, all = TRUE)
+merged_sig_updown_T0_family <- merge(sig_T0_family, merged_sig_updown_T0_family, all = TRUE)
+write.csv(merged_sig_updown_T0_family, file = "updown_family_T0_antibiotics.csv")
+kable(merged_sig_updown_T0_family)
+
+```
+
+### Genus
+
+Number of OTUs that are significantly up vs. down regulated in +Antibiotic vs. -Antibiotic
+treatments aggregated at the genus level. Upregulation means that OTU abundance is greater
+with than without antibiotics:
+
+```{r echo=FALSE}
+sig_OTUs <- df_T0[df_T0$pval.antibiotic.fdr < alpha, "OTUname"]
+sig_T0_genus <- aggregate(pval.antibiotic.fdr ~ genus,
+                              FUN = function(x) sum(x < alpha), data = df_T0)
+colnames(sig_T0_genus)[ncol(sig_T0_genus)] <- "signif"
+updown_T0_MinusA <- aggregate(abundance ~ genus + genus + order + genus + genus + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t0_long, 
+                                                   antibiotic == "MinusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_MinusA)[ncol(updown_T0_MinusA)] <- "abund.MinusA"
+updown_T0_PlusA <- aggregate(abundance ~ genus + genus + order + genus + genus,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t0_long, 
+                                                  antibiotic == "PlusA" & OTUname %in% sig_OTUs))
+colnames(updown_T0_PlusA)[ncol(updown_T0_PlusA)] <- "abund.PlusA"
+merged_updown_T0 <- merge(updown_T0_MinusA, updown_T0_PlusA)
+merged_updown_T0$logRatio <- log2((merged_updown_T0$abund.PlusA + delta) / (merged_updown_T0$abund.MinusA + delta))
+up_T0_genus <- aggregate(logRatio ~ genus, data = merged_updown_T0, FUN = function(x) sum(x > 0))
+colnames(up_T0_genus)[ncol(up_T0_genus)] <- "antibiotic.up"
+down_T0_genus <- aggregate(logRatio ~ genus, data = merged_updown_T0, FUN = function(x) sum(x < 0))
+colnames(down_T0_genus)[ncol(down_T0_genus)] <- "antibiotic.down"
+
+merged_sig_updown_T0_genus <- merge(down_T0_genus, up_T0_genus, all = TRUE)
+merged_sig_updown_T0_genus <- merge(sig_T0_genus, merged_sig_updown_T0_genus, all = TRUE)
+write.csv(merged_sig_updown_T0_genus, file = "updown_genus_T0_antibiotics.csv")
+kable(merged_sig_updown_T0_genus)
+
+```
+
+## Timestep T2
+
+Same as before except focus on exposure 1 and exposure 2. Define upregulation
+as abundance greater in +disease than -disease.
+
+### Phylum
+
+For exposure 1:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T2_phylum <- aggregate(pval.exposure_one.fdr ~ phylum,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_phylum)[ncol(sig_T2_phylum)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_phylum)[ncol(up_T2_phylum)] <- "exposure1.up"
+down_T2_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_phylum)[ncol(down_T2_phylum)] <- "exposure1.down"
+
+merged_sig_updown_T2_phylum <- merge(down_T2_phylum, up_T2_phylum, all = TRUE)
+merged_sig_updown_T2_phylum <- merge(sig_T2_phylum, merged_sig_updown_T2_phylum, all = TRUE)
+write.csv(merged_sig_updown_T2_phylum, file = "updown_phylum_T2_exposure1.csv")
+kable(merged_sig_updown_T2_phylum)
+```
+
+For exposure 2:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T2_phylum <- aggregate(pval.exposure_two.fdr ~ phylum,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_phylum)[ncol(sig_T2_phylum)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_phylum)[ncol(up_T2_phylum)] <- "exposure2.up"
+down_T2_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_phylum)[ncol(down_T2_phylum)] <- "exposure2.down"
+
+merged_sig_updown_T2_phylum <- merge(down_T2_phylum, up_T2_phylum, all = TRUE)
+merged_sig_updown_T2_phylum <- merge(sig_T2_phylum, merged_sig_updown_T2_phylum, all = TRUE)
+write.csv(merged_sig_updown_T2_phylum, file = "updown_phylum_T2_exposure2.csv")
+kable(merged_sig_updown_T2_phylum)
+```
+
+### Class
+
+For exposure 1:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T2_class <- aggregate(pval.exposure_one.fdr ~ class,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_class)[ncol(sig_T2_class)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ class + class + order + class + class + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ class + class + order + class + class,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_class <- aggregate(logRatio ~ class, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_class)[ncol(up_T2_class)] <- "exposure1.up"
+down_T2_class <- aggregate(logRatio ~ class, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_class)[ncol(down_T2_class)] <- "exposure1.down"
+
+merged_sig_updown_T2_class <- merge(down_T2_class, up_T2_class, all = TRUE)
+merged_sig_updown_T2_class <- merge(sig_T2_class, merged_sig_updown_T2_class, all = TRUE)
+write.csv(merged_sig_updown_T2_class, file = "updown_class_T2_exposure1.csv")
+kable(merged_sig_updown_T2_class)
+```
+
+For exposure 2:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T2_class <- aggregate(pval.exposure_two.fdr ~ class,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_class)[ncol(sig_T2_class)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ class + class + order + class + class + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ class + class + order + class + class,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_class <- aggregate(logRatio ~ class, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_class)[ncol(up_T2_class)] <- "exposure2.up"
+down_T2_class <- aggregate(logRatio ~ class, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_class)[ncol(down_T2_class)] <- "exposure2.down"
+
+merged_sig_updown_T2_class <- merge(down_T2_class, up_T2_class, all = TRUE)
+merged_sig_updown_T2_class <- merge(sig_T2_class, merged_sig_updown_T2_class, all = TRUE)
+write.csv(merged_sig_updown_T2_class, file = "updown_class_T2_exposure2.csv")
+kable(merged_sig_updown_T2_class)
+```
+
+
+### Order
+
+For exposure 1:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T2_order <- aggregate(pval.exposure_one.fdr ~ order,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_order)[ncol(sig_T2_order)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ order + order + order + order + order + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ order + order + order + order + order,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_order <- aggregate(logRatio ~ order, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_order)[ncol(up_T2_order)] <- "exposure1.up"
+down_T2_order <- aggregate(logRatio ~ order, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_order)[ncol(down_T2_order)] <- "exposure1.down"
+
+merged_sig_updown_T2_order <- merge(down_T2_order, up_T2_order, all = TRUE)
+merged_sig_updown_T2_order <- merge(sig_T2_order, merged_sig_updown_T2_order, all = TRUE)
+write.csv(merged_sig_updown_T2_order, file = "updown_order_T2_exposure1.csv")
+kable(merged_sig_updown_T2_order)
+```
+
+For exposure 2:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T2_order <- aggregate(pval.exposure_two.fdr ~ order,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_order)[ncol(sig_T2_order)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ order + order + order + order + order + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ order + order + order + order + order,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_order <- aggregate(logRatio ~ order, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_order)[ncol(up_T2_order)] <- "exposure2.up"
+down_T2_order <- aggregate(logRatio ~ order, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_order)[ncol(down_T2_order)] <- "exposure2.down"
+
+merged_sig_updown_T2_order <- merge(down_T2_order, up_T2_order, all = TRUE)
+merged_sig_updown_T2_order <- merge(sig_T2_order, merged_sig_updown_T2_order, all = TRUE)
+write.csv(merged_sig_updown_T2_order, file = "updown_order_T2_exposure2.csv")
+kable(merged_sig_updown_T2_order)
+```
+
+### Family
+
+For exposure 1:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.exposure_one.fdr ~ family,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + family + order + family + family + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ family + family + order + family + family,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure1.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure1.down"
+
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+write.csv(merged_sig_updown_T2_family, file = "updown_family_T2_exposure1.csv")
+kable(merged_sig_updown_T2_family)
+```
+
+For exposure 2:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T2_family <- aggregate(pval.exposure_two.fdr ~ family,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_family)[ncol(sig_T2_family)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ family + family + order + family + family + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ family + family + order + family + family,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_family)[ncol(up_T2_family)] <- "exposure2.up"
+down_T2_family <- aggregate(logRatio ~ family, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_family)[ncol(down_T2_family)] <- "exposure2.down"
+
+merged_sig_updown_T2_family <- merge(down_T2_family, up_T2_family, all = TRUE)
+merged_sig_updown_T2_family <- merge(sig_T2_family, merged_sig_updown_T2_family, all = TRUE)
+write.csv(merged_sig_updown_T2_family, file = "updown_family_T2_exposure2.csv")
+kable(merged_sig_updown_T2_family)
+```
+
+### Genus
+
+For exposure 1:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T2_genus <- aggregate(pval.exposure_one.fdr ~ genus,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_genus)[ncol(sig_T2_genus)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ genus + genus + order + genus + genus + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ genus + genus + order + genus + genus,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_genus <- aggregate(logRatio ~ genus, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_genus)[ncol(up_T2_genus)] <- "exposure1.up"
+down_T2_genus <- aggregate(logRatio ~ genus, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_genus)[ncol(down_T2_genus)] <- "exposure1.down"
+
+merged_sig_updown_T2_genus <- merge(down_T2_genus, up_T2_genus, all = TRUE)
+merged_sig_updown_T2_genus <- merge(sig_T2_genus, merged_sig_updown_T2_genus, all = TRUE)
+write.csv(merged_sig_updown_T2_genus, file = "updown_genus_T2_exposure1.csv")
+kable(merged_sig_updown_T2_genus)
+```
+
+For exposure 2:
+
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T2[df_T2$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T2_genus <- aggregate(pval.exposure_two.fdr ~ genus,
+                              FUN = function(x) sum(x < alpha), data = df_T2)
+colnames(sig_T2_genus)[ncol(sig_T2_genus)] <- "signif"
+updown_T2_MinusA <- aggregate(abundance ~ genus + genus + order + genus + genus + OTUname,
+                                     FUN = mean, na.rm = TRUE, 
+                                     data = subset(merged_counts_merged_t2_long, 
+                                                   exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T2_MinusA)[ncol(updown_T2_MinusA)] <- "abund.MinusA"
+updown_T2_PlusA <- aggregate(abundance ~ genus + genus + order + genus + genus,
+                                    FUN = mean, na.rm = TRUE, 
+                                    data = subset(merged_counts_merged_t2_long, 
+                                                  exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T2_PlusA)[ncol(updown_T2_PlusA)] <- "abund.PlusA"
+merged_updown_T2 <- merge(updown_T2_MinusA, updown_T2_PlusA)
+merged_updown_T2$logRatio <- log2((merged_updown_T2$abund.PlusA + delta) / (merged_updown_T2$abund.MinusA + delta))
+up_T2_genus <- aggregate(logRatio ~ genus, data = merged_updown_T2, FUN = function(x) sum(x > 0))
+colnames(up_T2_genus)[ncol(up_T2_genus)] <- "exposure2.up"
+down_T2_genus <- aggregate(logRatio ~ genus, data = merged_updown_T2, FUN = function(x) sum(x < 0))
+colnames(down_T2_genus)[ncol(down_T2_genus)] <- "exposure2.down"
+
+merged_sig_updown_T2_genus <- merge(down_T2_genus, up_T2_genus, all = TRUE)
+merged_sig_updown_T2_genus <- merge(sig_T2_genus, merged_sig_updown_T2_genus, all = TRUE)
+write.csv(merged_sig_updown_T2_genus, file = "updown_genus_T2_exposure2.csv")
+kable(merged_sig_updown_T2_genus)
+```
+
+## Timestep T3
+
+Same as before except focus on exposure 1 and exposure 2. Define upregulation
+as abundance greater in +disease than -disease.
+
+### Phylum
+
+For exposure 1:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T3_phylum <- aggregate(pval.exposure_one.fdr ~ phylum,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_phylum)[ncol(sig_T3_phylum)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_phylum)[ncol(up_T3_phylum)] <- "exposure1.up"
+down_T3_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_phylum)[ncol(down_T3_phylum)] <- "exposure1.down"
+
+merged_sig_updown_T3_phylum <- merge(down_T3_phylum, up_T3_phylum, all = TRUE)
+merged_sig_updown_T3_phylum <- merge(sig_T3_phylum, merged_sig_updown_T3_phylum, all = TRUE)
+write.csv(merged_sig_updown_T3_phylum, file = "updown_phylum_T3_exposure1.csv")
+kable(merged_sig_updown_T3_phylum)
+```
+
+For exposure 2:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T3_phylum <- aggregate(pval.exposure_two.fdr ~ phylum,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_phylum)[ncol(sig_T3_phylum)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ phylum + phylum + order + phylum + phylum,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_phylum)[ncol(up_T3_phylum)] <- "exposure2.up"
+down_T3_phylum <- aggregate(logRatio ~ phylum, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_phylum)[ncol(down_T3_phylum)] <- "exposure2.down"
+
+merged_sig_updown_T3_phylum <- merge(down_T3_phylum, up_T3_phylum, all = TRUE)
+merged_sig_updown_T3_phylum <- merge(sig_T3_phylum, merged_sig_updown_T3_phylum, all = TRUE)
+write.csv(merged_sig_updown_T3_phylum, file = "updown_phylum_T3_exposure2.csv")
+kable(merged_sig_updown_T3_phylum)
+```
+
+### Class
+
+For exposure 1:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T3_class <- aggregate(pval.exposure_one.fdr ~ class,
+                          FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_class)[ncol(sig_T3_class)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ class + class + order + class + class + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ class + class + order + class + class,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_class <- aggregate(logRatio ~ class, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_class)[ncol(up_T3_class)] <- "exposure1.up"
+down_T3_class <- aggregate(logRatio ~ class, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_class)[ncol(down_T3_class)] <- "exposure1.down"
+
+merged_sig_updown_T3_class <- merge(down_T3_class, up_T3_class, all = TRUE)
+merged_sig_updown_T3_class <- merge(sig_T3_class, merged_sig_updown_T3_class, all = TRUE)
+write.csv(merged_sig_updown_T3_class, file = "updown_class_T3_exposure1.csv")
+kable(merged_sig_updown_T3_class)
+```
+
+For exposure 2:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T3_class <- aggregate(pval.exposure_two.fdr ~ class,
+                          FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_class)[ncol(sig_T3_class)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ class + class + order + class + class + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ class + class + order + class + class,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_class <- aggregate(logRatio ~ class, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_class)[ncol(up_T3_class)] <- "exposure2.up"
+down_T3_class <- aggregate(logRatio ~ class, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_class)[ncol(down_T3_class)] <- "exposure2.down"
+
+merged_sig_updown_T3_class <- merge(down_T3_class, up_T3_class, all = TRUE)
+merged_sig_updown_T3_class <- merge(sig_T3_class, merged_sig_updown_T3_class, all = TRUE)
+write.csv(merged_sig_updown_T3_class, file = "updown_class_T3_exposure2.csv")
+kable(merged_sig_updown_T3_class)
+```
+
+
+### Order
+
+For exposure 1:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T3_order <- aggregate(pval.exposure_one.fdr ~ order,
+                          FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_order)[ncol(sig_T3_order)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ order + order + order + order + order + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ order + order + order + order + order,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_order <- aggregate(logRatio ~ order, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_order)[ncol(up_T3_order)] <- "exposure1.up"
+down_T3_order <- aggregate(logRatio ~ order, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_order)[ncol(down_T3_order)] <- "exposure1.down"
+
+merged_sig_updown_T3_order <- merge(down_T3_order, up_T3_order, all = TRUE)
+merged_sig_updown_T3_order <- merge(sig_T3_order, merged_sig_updown_T3_order, all = TRUE)
+write.csv(merged_sig_updown_T3_order, file = "updown_order_T3_exposure1.csv")
+kable(merged_sig_updown_T3_order)
+```
+
+For exposure 2:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T3_order <- aggregate(pval.exposure_two.fdr ~ order,
+                          FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_order)[ncol(sig_T3_order)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ order + order + order + order + order + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ order + order + order + order + order,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_order <- aggregate(logRatio ~ order, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_order)[ncol(up_T3_order)] <- "exposure2.up"
+down_T3_order <- aggregate(logRatio ~ order, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_order)[ncol(down_T3_order)] <- "exposure2.down"
+
+merged_sig_updown_T3_order <- merge(down_T3_order, up_T3_order, all = TRUE)
+merged_sig_updown_T3_order <- merge(sig_T3_order, merged_sig_updown_T3_order, all = TRUE)
+write.csv(merged_sig_updown_T3_order, file = "updown_order_T3_exposure2.csv")
+kable(merged_sig_updown_T3_order)
+```
+
+### Family
+
+For exposure 1:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.exposure_one.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + family + order + family + family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ family + family + order + family + family,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure1.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure1.down"
+
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+write.csv(merged_sig_updown_T3_family, file = "updown_family_T3_exposure1.csv")
+kable(merged_sig_updown_T3_family)
+```
+
+For exposure 2:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T3_family <- aggregate(pval.exposure_two.fdr ~ family,
+                           FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_family)[ncol(sig_T3_family)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ family + family + order + family + family + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ family + family + order + family + family,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_family)[ncol(up_T3_family)] <- "exposure2.up"
+down_T3_family <- aggregate(logRatio ~ family, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_family)[ncol(down_T3_family)] <- "exposure2.down"
+
+merged_sig_updown_T3_family <- merge(down_T3_family, up_T3_family, all = TRUE)
+merged_sig_updown_T3_family <- merge(sig_T3_family, merged_sig_updown_T3_family, all = TRUE)
+write.csv(merged_sig_updown_T3_family, file = "updown_family_T3_exposure2.csv")
+kable(merged_sig_updown_T3_family)
+```
+
+### Genus
+
+For exposure 1:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_one.fdr < alpha, "OTUname"]
+sig_T3_genus <- aggregate(pval.exposure_one.fdr ~ genus,
+                          FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_genus)[ncol(sig_T3_genus)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ genus + genus + order + genus + genus + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_one == "H" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ genus + genus + order + genus + genus,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_one == "D" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_genus <- aggregate(logRatio ~ genus, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_genus)[ncol(up_T3_genus)] <- "exposure1.up"
+down_T3_genus <- aggregate(logRatio ~ genus, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_genus)[ncol(down_T3_genus)] <- "exposure1.down"
+
+merged_sig_updown_T3_genus <- merge(down_T3_genus, up_T3_genus, all = TRUE)
+merged_sig_updown_T3_genus <- merge(sig_T3_genus, merged_sig_updown_T3_genus, all = TRUE)
+write.csv(merged_sig_updown_T3_genus, file = "updown_genus_T3_exposure1.csv")
+kable(merged_sig_updown_T3_genus)
+```
+
+For exposure 2:
+  
+```{r echo=FALSE}
+# Now compute fold change for antibiotic and exposure1 and exposure2
+# Define up for exposure as +D > -D
+
+# ---- Exposure 1 ----
+sig_OTUs <- df_T3[df_T3$pval.exposure_two.fdr < alpha, "OTUname"]
+sig_T3_genus <- aggregate(pval.exposure_two.fdr ~ genus,
+                          FUN = function(x) sum(x < alpha), data = df_T3)
+colnames(sig_T3_genus)[ncol(sig_T3_genus)] <- "signif"
+updown_T3_MinusA <- aggregate(abundance ~ genus + genus + order + genus + genus + OTUname,
+                              FUN = mean, na.rm = TRUE, 
+                              data = subset(merged_counts_merged_t3_long, 
+                                            exposure_two == "h" & OTUname %in% sig_OTUs))
+colnames(updown_T3_MinusA)[ncol(updown_T3_MinusA)] <- "abund.MinusA"
+updown_T3_PlusA <- aggregate(abundance ~ genus + genus + order + genus + genus,
+                             FUN = mean, na.rm = TRUE, 
+                             data = subset(merged_counts_merged_t3_long, 
+                                           exposure_two == "d" & OTUname %in% sig_OTUs))
+colnames(updown_T3_PlusA)[ncol(updown_T3_PlusA)] <- "abund.PlusA"
+merged_updown_T3 <- merge(updown_T3_MinusA, updown_T3_PlusA)
+merged_updown_T3$logRatio <- log2((merged_updown_T3$abund.PlusA + delta) / (merged_updown_T3$abund.MinusA + delta))
+up_T3_genus <- aggregate(logRatio ~ genus, data = merged_updown_T3, FUN = function(x) sum(x > 0))
+colnames(up_T3_genus)[ncol(up_T3_genus)] <- "exposure2.up"
+down_T3_genus <- aggregate(logRatio ~ genus, data = merged_updown_T3, FUN = function(x) sum(x < 0))
+colnames(down_T3_genus)[ncol(down_T3_genus)] <- "exposure2.down"
+
+merged_sig_updown_T3_genus <- merge(down_T3_genus, up_T3_genus, all = TRUE)
+merged_sig_updown_T3_genus <- merge(sig_T3_genus, merged_sig_updown_T3_genus, all = TRUE)
+write.csv(merged_sig_updown_T3_genus, file = "updown_genus_T3_exposure2.csv")
+kable(merged_sig_updown_T3_genus)
+```
+

@@ -1,2 +1,5 @@
 *.*
 !*.Rmd
+.Rproj.user
+!*.png
+!*.md

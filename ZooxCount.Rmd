@@ -1,0 +1,154 @@
+---
+title: "ZooxCount"
+output: 
+  pdf_document: 
+      fig_caption: true
+  html_document:
+    df_print: paged
+  md_document:
+    variant: gfm
+    df_print: paged
+  word_document: default
+---
+
+**Measuring Bleaching**
+
+To measure the degree of bleaching after menthol exposure, 6 bleached and 6 unbleached anemones were randomly selected for zoox counting at the beginning of the experiment. After the bleaching cycle the selected anemones were weighed and homogenized in filtered seawater. One homogenate tube was dropped and the homogenate lost, leaving 6 control and 5 menthol samples for counting. The homogenate was viewed using a hemocytometer. Images were captured and zoox were counted using the BioConductor package EBImage. In addition to counting zoox with EBImage, zoox were manually counted using ImageJ. The images showing manual counts are available as supplemental data in the ManualCountImageJ folder. The automated method tended to count circular chunks of cellular debris as zoox, even though by visual inspection the chunks were clearly not zoox. Despite the over-counting of non-zoox cellular debris, both the automated and manual counts showed a significant reduction in zoox after treatment with menthol. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, results='asis')
+## try http:// if https:// URLs are not supported
+library("EBImage")
+library("knitr")
+```
+
+```{r}
+#Read in all hemocytometer images
+dir <- 'ZooxCount/'
+files <- list.files(dir, pattern="Aip*")
+#Output directory for images showing counted zoox
+outDir <- 'ZooxCounted/'
+#files
+```
+
+```{r}
+#Initialize a data frame to store counts.
+dfCounts <- data.frame()
+
+for (ifile in files){
+  x <- readImage(paste0(dir, ifile))
+  #Output the original image
+  #display(x, method="raster")
+  #Convert the image to grayscale
+  colorMode(x) <- "Grayscale"
+  #Keep just the frame with the grayscale image
+  x <- getFrame(x, 3)
+  #Find disc-shaped areas about the size of zoox
+  disc = makeBrush(23, "disc")
+  disc = disc / sum(disc)
+  offset = 0.05
+  x = filter2( x, disc )
+  #Convert to black and white for a binary determination - zoox or not?
+  x <- bwlabel(x < .48)
+  #Output the counted image to show which regions were counted as zoox
+  #display(x, method="raster")
+  #Write the modified image as a separate file
+  writeImage(x, file=paste0(outDir, ifile))
+  #Get the count and add to the data frame
+  count <- max(x)
+  #print(count)
+  dfCounts[ifile, "Count"] <- count
+}
+```
+
+```{r}
+Menthol <- c("Control", "Control", "Control", "Control", "Control", 
+             "Menthol","Menthol","Menthol", "Control", "Menthol", "Menthol")
+#Add the weights in milligrams to the data frame
+mgWeight <- c(103, 139, 156, 182, 361, 67, 126, 85, 68, 65, 142)
+#Number of squares in hemocytometer
+hemoGrid <- 15*15
+#Squares counted
+squaresCounted <- 8
+#Hemocytometer volume
+volumeMl <- .1 
+#Add manual counts of zoox.
+dfCounts$ManualCount <- c(187, 132, 107, 71, 111, 1,  2,  5, 43,  2,  8)
+#Calculate zoox/mL
+dfCounts$perMl <- with(dfCounts, (Count/volumeMl) * (squaresCounted /hemoGrid))
+dfCounts$perMlManual <- with(dfCounts, (ManualCount/volumeMl) * (squaresCounted /hemoGrid))
+#Add menthol information to data frame
+dfCounts$Menthol <- Menthol
+#Add weight information to data frame
+dfCounts$Weight <- mgWeight
+#Log-transform the zoox counts
+dfCounts$logCount <- with(dfCounts, log(perMl))
+dfCounts$logCountManual <- with(dfCounts, log(perMlManual))
+#Calculate zoox/weight/volume
+dfCounts$ZooxPerMgMl <- with(dfCounts, perMl/Weight)
+dfCounts$ZooxPerMgMlManual <- with(dfCounts, perMlManual/Weight)
+#Calculate log zoox/weight/volume
+dfCounts$ZooxPerMgMlLog <- with(dfCounts, logCount/Weight)
+dfCounts$ZooxPerMgMlLogManual <- with(dfCounts, logCountManual/Weight)
+```
+
+\newpage
+
+One-way ANOVA of the log-transformed zoox counts showed a significant difference in the zoox count between bleached and un-bleached anemones.
+
+```{r}
+aov.zoox.log <- aov(ZooxPerMgMlLog ~ Menthol, data=dfCounts)
+
+zooxSumm <- as.data.frame(unclass(summary(aov.zoox.log)))
+kable(zooxSumm, caption = "One-way ANOVA, automated zoox counts")
+```
+
+\newpage
+
+Reduction in zoox count for bleached anemones.
+
+```{r fig.cap="Automated Zoox Count"}
+boxplot(ZooxPerMgMl ~ Menthol, data=dfCounts)
+```
+
+\newpage
+
+One-way ANOVA of the log-transformed zoox manual counts showed a significant difference in the zoox count between bleached and un-bleached anemones.
+
+```{r}
+aov.zoox.logManual <- aov(ZooxPerMgMlLogManual ~ Menthol, data=dfCounts)
+zooxSummManual <- as.data.frame(unclass(summary(aov.zoox.logManual)))
+kable(zooxSummManual, caption = "One-way ANOVA, manual zoox counts")
+```
+
+\newpage
+
+Reduction in zoox count for bleached anemones.
+
+```{r fig.cap="Manual Zoox Count"}
+boxplot(ZooxPerMgMl ~ Menthol, data=dfCounts)
+```
+
+\newpage
+
+One-way ANOVA of the anemone weights did not show a significant difference in weight between the bleached and un-bleached anemones. 
+
+```{r}
+aov.weight <- aov(Weight ~ Menthol, data=dfCounts)
+weightSumm <- as.data.frame(unclass(summary(aov.weight)))
+kable(weightSumm, caption = "One-way ANOVA, anemone weight")
+```
+
+\newpage
+
+```{r fig.cap="Weights of bleached and un-bleached anemones"}
+boxplot(Weight ~ Menthol, data=dfCounts)
+```
+
+\newpage
+
+```{r fig.cap="Symbiodinium Counts Bleached and Un-Bleached"}
+dfCounts <- subset(dfCounts, select=c("Menthol","Count","ManualCount", "perMl","logCount", "Weight", "ZooxPerMgMl"))
+kable(dfCounts)
+```
+

@@ -1,0 +1,78 @@
+---
+title: "AiptasiaGeneLevelAnalysis"
+author: "Chuck Roesel"
+date: "3/8/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(DESeq2)
+library(dplyr)
+library(tidyr)
+```
+```{r message=FALSE, warning=FALSE}
+load("AiptasiaFigsAndTables.RData")
+load("GeneMappings.RData")
+```
+
+```{r}
+genePath <- merge(geneDesc, keggPathways, by.x=0, by.y="Gene")
+vibrio <- subset(resVibrio, padj < .05, select=c("log2FoldChange","padj"))
+vibrio <- data.frame(vibrio)
+menthol <- subset(resMenthol, padj < .05, select=c("log2FoldChange","padj"))
+menthol <- data.frame(menthol)
+colnames(menthol) <- c("MentholL2FC", "MentholPadj")
+genePath <- merge(genePath, vibrio, by.x="Row.names", by.y=0, all=T)
+colnames(genePath) <- c("KO", "GeneDesc", "PathDesc", "Path", "Category1", "Category", "VibrioL2FC", "VibrioPadj")
+genePath <- merge(genePath, menthol, by.x="KO", by.y=0, all=T)
+write.csv(genePath, file="allDE.csv")
+```
+```{bash}
+wget -O koGenes.tsv http://rest.kegg.jp/list/ko
+```
+
+```{r}
+genePath$KO <- as.character(genePath$KO)
+koGenes <- read.table(file="koGenes.tsv", sep="\t", quote="", stringsAsFactors = F)
+koGenes <- koGenes %>% separate(V2, c("Symbols", "Description"), ";")
+koGenes <- koGenes %>% separate(V1, c("Org", "KO"), ":")
+koGenes <- subset(koGenes, select=c("KO", "Symbols"))
+write.csv(koGenes, file="koGenes.csv")
+genePath <- merge(genePath, koGenes, by.x="KO", by.y="KO", all=T)
+genePath <- subset(genePath, !is.na(VibrioPadj) | !is.na(MentholPadj))
+```
+```{r}
+head(vibrioDiff)
+```
+```{r}
+head(genePath)
+```
+```{r}
+library(pheatmap)
+library(RColorBrewer)
+genePath <- subset(genePath, PathDesc %in% rownames(both))
+redScale <- colorRampPalette(c("white", "red"))
+redColors <- redScale(6)
+blueScale <- colorRampPalette(c("blue", "white"))
+blueColors <- blueScale(6)
+write.csv(genePath, file="deGenesWithSymbolsAndPathways.csv")
+for (category in unique(genePath$Category)){
+  catGenes <- unique(subset(genePath, Category==category, select=c("Category","Symbols","GeneDesc", "VibrioL2FC", "MentholL2FC")))
+  write.csv(catGenes, file=paste0("Tables/", category, ".csv"))
+  mCatGenes <- as.matrix(subset(catGenes, select=c("VibrioL2FC", "MentholL2FC")))
+  rownames(mCatGenes) <- catGenes$Symbols
+  mCatGenes[is.na(mCatGenes)] <- 0
+  cat("\n")
+  pheatmap(mCatGenes, caption=category, breaks=c(-2.5,-2,-1.5,-1,-.5,-.25, 0,.25, .5,1,1.5, 2,2.5), color=c(blueColors, redColors), cellheight=12, width=5, height=9, filename=paste0(category, '.pdf'))
+}
+```
+
+
+```{r}
+save.image(file="AiptasiaGeneLevelAnalysis.RData")
+```

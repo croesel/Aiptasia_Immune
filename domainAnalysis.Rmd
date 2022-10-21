@@ -1,0 +1,65 @@
+---
+title: "domainAnalysis"
+author: "Chuck Roesel"
+date: "6/8/2018"
+output:
+  pdf_document:
+    df_print: kable
+    keep_tex: true
+  word_document: default
+classoption: portrait
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(tidyr)
+library(data.table)
+library(knitr)
+#library(latexpdf)
+library(kableExtra)
+load("AiptasiaFigsAndTables.RData")
+```
+
+```{r}
+domainInfo <- read.table("Pfam/kxDomains.out", header=F, stringsAsFactors = F, sep="\t")
+```
+
+```{r}
+domainInfo2 <- domainInfo %>% separate(V1, c("Domain", "PfamID", "KX"), "\\s+")
+```
+
+```{r}
+allDomains <- aggregate( Domain ~ KX, domainInfo2, function(x) toString(unique(x)))
+```
+
+```{r}
+lrrTirContainingA <- subset(domainInfo2, (Domain %like% "LRR" | Domain %like% "TIR"))
+maybeSingleTLR <- aggregate( Domain ~ KX, lrrTirContainingA, function(x) toString(unique(x)))
+```
+
+
+```{r}
+domainAndDE <- merge(dfAllRes, domainInfo2, by.x=0, by.y="KX")
+```
+
+
+```{r}
+lrrTirContaining <- unique(subset(domainAndDE, (Domain %like% "LRR" | Domain %like% "TIR"), select=-c(Domain, PfamID)))
+```
+
+```{r}
+maybeTLR <- merge(lrrTirContaining, allDomains, by.x="Row.names", by.y="KX")
+```
+```{r}
+lrrTirAndDE <- subset(maybeTLR, select=c("Row.names", "VibrioLFC", "VibrioPadj", "Domain"))
+```
+
+```{r}
+lrrTirAndDEAnnot <- merge(lrrTirAndDE, aipAnnot, by.x="Row.names", by.y="qseqid", all.x=T)
+```
+
+```{r}
+maybeTLR2 <- subset(lrrTirAndDEAnnot, select=c("Row.names", "VibrioLFC", "VibrioPadj", "Domain", "symbol"))
+colnames(maybeTLR2) <- c("KX", "VibrioLFC", "VibrioPadj", "Domain","Symbol")
+kable(maybeTLR2, format='latex', booktabs=T, longtable=T) %>% kable_styling(latex_options=c("striped", "repeat_header"), full_width = F) %>% column_spec(4, width = "25em")
+```

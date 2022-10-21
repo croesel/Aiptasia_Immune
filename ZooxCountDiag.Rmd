@@ -1,0 +1,54 @@
+---
+title: "ZooxCount"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+## try http:// if https:// URLs are not supported
+library("EBImage")
+library("knitr")
+```
+
+```{r}
+dir <- "ZooxCount/"
+ifile <- "Aip03.png"
+x <- readImage(paste0(dir, ifile))
+colorMode(x) <- "Grayscale"
+x <- getFrame(x, 3)
+disc = makeBrush(31, "disc")
+disc = disc / sum(disc)
+offset = 0.05
+x = filter2( x, disc )
+x <- bwlabel(x < .4)
+display(x, method="raster")
+max(x)
+```
+```{r}
+numberOfFrames(x, type = "total")
+w = makeBrush(size = 15, shape = 'disc', sigma = 5)
+#img_flo = filter2(x, w)
+#display(img_flo, all=T)
+fhi = matrix(1, nrow = 15, ncol = 15)
+fhi[2, 2] = -5
+#img_fhi = filter2(x, fhi)
+#display(img_fhi, all=T)
+img_median = medianFilter(x, 1)
+```
+```{r}
+display(bwlabel(x > .35), all=T)
+#display(x)
+#x = thresh(x, 18, 18, 0.17)
+#x = opening(x, makeBrush(5, shape='disc', sigma=5))
+#y = bwlabel(x)
+#count <- max(y)
+#print(count)
+```
+```{r}
+hist(y)
+```
+
+```{r}
+display(x)
+display(y)
+```

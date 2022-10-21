@@ -1,0 +1,424 @@
+---
+title: "Multivariate microbial abundance analyses"
+author: "Tarik C. Gouhier"
+date: "01/27/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+```
+
+## Data preparation
+
+Load packages and the extract our data:
+
+```{r}
+# Load packages
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+# Load results
+load("multivariate_microbial_abund.RData")
+```
+
+In this case, we're working with Hellinger-transformed abundance data.
+
+## Analyses for all time steps
+
+Perform nMDS and correlate explanatory variables to its axes:
+
+```{r echo = FALSE}
+# Show the factors
+env_all_table <- as.data.frame(rbind(env_all$factors$r, env_all$factors$pvals))
+rownames(env_all_table) <- c("Correlation", "P-value")
+kable(env_all_table)
+```
+
+All explanatory variables are significantly related to the nMDS axes. The factors
+that are most strongly correlated with the nMDS axes are times and genotype. Exposure
+and antibiotic are only very weakly correlated with the axes. This makes sense given
+that exposure doesn't take effect until T2 and T3. Here's a plot of
+the nMDS:
+
+```{r echo = FALSE}
+coords <- nmds_norm_hell$points
+par(plotconf)
+plot(coords[, 1], coords[, 2], xlab = "nMDS 1", ylab = "", type = "n",
+     xlim = c(-0.35, 0.35), ylim = c(-0.45, 0.45))
+mbox()
+ylabel("nMDS 2")
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_hell, phenos$antibiotic, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+xy_minus <- vegan:::veganCovEllipse(ellipse_coords$MinusA$cov, 
+                                    ellipse_coords$MinusA$center, sqrt(qchisq(conf, 2)))
+xy_plus <- vegan:::veganCovEllipse(ellipse_coords$PlusA$cov, 
+                                   ellipse_coords$PlusA$center, sqrt(qchisq(conf, 2)))
+vegan:::ordiArgAbsorber(xy_minus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['blue'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$MinusA$center[1], y = ellipse_coords$MinusA$center[2],
+     labels = "-AB", col = cb["blue"])
+vegan:::ordiArgAbsorber(xy_plus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['red'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$PlusA$center[1], y = ellipse_coords$PlusA$center[2], 
+     labels = "+AB", col = cb["red"])
+ordiellipse(nmds_norm_hell, phenos$times, kind="se", conf=0.95, lwd=2, 
+            draw = "poly", col = c("black"), alpha = 40, label = TRUE)
+
+text(x = env_all$factors$centroids[10:nrow(env_all$factors$centroids), 1], 
+     y = env_all$factors$centroids[10:nrow(env_all$factors$centroids), 2], 
+     lab = gsub(rownames(env_all$factors$centroids)[10:nrow(env_all$factors$centroids)], pattern = "genotype", replacement = ""),
+     col = cb["green"], cex = 0.75)
+
+text(x = env_all$factors$centroids[6:9, 1], 
+     y = env_all$factors$centroids[6:9, 2], 
+     lab = gsub(rownames(env_all$factors$centroids)[6:9], pattern = "exposure", replacement = ""), 
+     col = cb["orange"])
+```
+
+There is still a clear separation of the 95\% ellipses for antibiotics indicating that the
+communities exposed to antibiotics differ from those that were not exposed to antibiotics.
+
+There is also a clear trajectory in the bacterial communities from T0 to T3. At T0,
+the bacterial communities are similar to those found in the +AB treatment. However,
+over time, the bacterial communities become more similar to those found in the -AB
+treatment. This trajectory corresponds to a shift from healthy (+AB) to diseased (-AB)
+microbiome.
+
+And the PERMANOVA:
+
+```{r echo = FALSE}
+kable(permanova$aov.tab)
+```
+
+All the main effects are significant and most of the two way interactions are significant.
+The three way interaction between time, antibiotic and exposure. The effects of time
+are obvious and its interactions with the treatments should be carefully interpreted
+given the experimental design (i.e., interventions at T2 not T0 lead to spurious interactions). 
+
+We recover the significant antibiotic x exposure treatment effect observed in the coral host 
+analysis. This suggests that the effect of exposure depends on whether or not the corals had
+their microbiome reset via antibiotics.
+
+The antibiotic x genotype treatment suggests that effects of the antibiotics varies with
+genotype, which may be due to inherent differences in the susceptibility of the microbiomes
+inhabiting each coral to antibiotics.
+
+## Analysis for time steps T2 and T3
+
+Perform nMDS and correlate explanatory variables to its axes:
+
+```{r echo = FALSE}
+# Show the factors
+env_all_T2_T3 <- envfit(nmds_norm_T2_T3, 
+                     env = subset(phenos[locs_T2_T3, ], 
+                                  select = c("antibiotic", "genotype", "exposure", "times")))
+
+env_all_T2_T3_table <- as.data.frame(rbind(env_all_T2_T3$factors$r, env_all_T2_T3$factors$pvals))
+rownames(env_all_T2_T3_table) <- c("Correlation", "P-value")
+kable(env_all_T2_T3_table)
+```
+
+All explanatory variables are significantly related to the nMDS axes. The factors
+that are most strongly correlated with the nMDS axes are times and genotype. Exposure
+and antibiotic are only very weakly correlated with the axes. Here's a plot of
+the nMDS:
+
+```{r echo = FALSE}
+coords <- nmds_norm_T2_T3$points
+par(plotconf)
+plot(coords[, 1], coords[, 2], xlab = "nMDS 1", ylab = "", type = "n",
+     xlim = c(-0.21, 0.21), ylim = c(-0.3, 0.3))
+mbox()
+ylabel("nMDS 2")
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_T2_T3, phenos$antibiotic[locs_T2_T3], kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+xy_minus <- vegan:::veganCovEllipse(ellipse_coords$MinusA$cov, 
+                                    ellipse_coords$MinusA$center, sqrt(qchisq(conf, 2)))
+xy_plus <- vegan:::veganCovEllipse(ellipse_coords$PlusA$cov, 
+                                   ellipse_coords$PlusA$center, sqrt(qchisq(conf, 2)))
+vegan:::ordiArgAbsorber(xy_minus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['blue'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$MinusA$center[1], y = ellipse_coords$MinusA$center[2],
+     labels = "-AB", col = cb["blue"])
+vegan:::ordiArgAbsorber(xy_plus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['red'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$PlusA$center[1], y = ellipse_coords$PlusA$center[2], 
+     labels = "+AB", col = cb["red"])
+ordiellipse(nmds_norm_T2_T3, phenos$times[locs_T2_T3], kind="se", conf=0.95, lwd=2, 
+            draw = "poly", col = c("black"), alpha = 40, label = TRUE)
+
+text(x = env_all_T2_T3$factors$centroids[3:10, 1], 
+     y = env_all_T2_T3$factors$centroids[3:10, 2], 
+     lab = gsub(rownames(env_all_T2_T3$factors$centroids)[3:10], pattern = "genotype", replacement = ""),
+     col = cb["green"], cex = 0.75)
+
+text(x = env_all_T2_T3$factors$centroids[11:14, 1], 
+     y = env_all_T2_T3$factors$centroids[11:14, 2], 
+     lab = gsub(rownames(env_all_T2_T3$factors$centroids)[11:14], pattern = "exposure", replacement = ""), 
+     col = cb["orange"])
+```
+
+There 95\% ellipses for antibiotics overlap indicating that the
+communities exposed to antibiotics do not significantly differ from 
+those that were not exposed to antibiotics at T2 and T3.
+
+There is also a clear trajectory in the bacterial communities from T2 to T3. At T2,
+the bacterial communities are similar to those found in the +AB treatment. However,
+over time, the bacterial communities become more similar to those found in the -AB
+treatment. This trajectory corresponds to a shift from healthy (+AB) to diseased (-AB)
+microbiome.
+
+And the PERMANOVA:
+
+```{r echo = FALSE}
+kable(permanova_T2_T3$aov.tab)
+```
+
+All the main effects are significant and most of the two way interactions are significant.
+The two way interaction between time and exposure and time and antibiotics suggest that the
+effect of antibiotics decays over time and that the effect of exposure strenghthens over time.
+
+The significant three-way interaction between antibiotics, exposure and time suggests that the 
+effect of exposure on community structure depends on antibiotics and time. This is consistent with
+the notion that exposure effect take time to kick in and that they vary based on whether the corals
+had their microbiome reset via antibiotics.
+
+We recover the significant antibiotic x exposure treatment effect observed in the coral host 
+analysis. This suggests that the effect of exposure depends on whether or not the corals had
+their microbiome reset via antibiotics.
+
+The lack of an antibiotic x genotype or antibiotic x genotype x time interaction 
+suggests that effects of the antibiotics do not vary across genotypes or time steps
+after time step 0. This suggest that the signficant genotype x antibiotic interaction
+observed at T0 is due to some genotypes taking longer to respond to the antibiotic treatments
+(delayed effects).
+
+## Checking the effect of antibiotic at T0
+
+To check the effect of the antibiotic treatment, we can analyze the data collected
+at T0 only:
+
+```{r echo = FALSE}
+env_all_T0_table <- as.data.frame(rbind(env_all_T0$factors$r, env_all_T0$factors$pvals))
+rownames(env_all_T0_table) <- c("Correlation", "P-value")
+kable(env_all_T0_table)
+```
+
+Genotype is strongly correlated to the nMDS axes but antibiotic is only weakly correlated
+to the same axes suggesting a weaker effect. Here's a plot of the nMDS:
+
+```{r echo = FALSE}
+coords <- nmds_norm_T0$points
+par(plotconf)
+plot(coords[, 1], coords[, 2], xlab = "nMDS 1", ylab = "", type = "n",
+     xlim = c(-0.5, 0.5), ylim = c(-0.2, 0.2))
+mbox()
+ylabel("nMDS 2")
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_T0, phenos[locs_T0, ]$antibiotic, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+xy_minus <- vegan:::veganCovEllipse(ellipse_coords$MinusA$cov, 
+                                    ellipse_coords$MinusA$center, sqrt(qchisq(conf, 2)))
+xy_plus <- vegan:::veganCovEllipse(ellipse_coords$PlusA$cov, 
+                                   ellipse_coords$PlusA$center, sqrt(qchisq(conf, 2)))
+vegan:::ordiArgAbsorber(xy_minus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['blue'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$MinusA$center[1], y = ellipse_coords$MinusA$center[2],
+     labels = "-AB", col = cb["blue"])
+vegan:::ordiArgAbsorber(xy_plus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['red'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$PlusA$center[1], y = ellipse_coords$PlusA$center[2], 
+     labels = "+AB", col = cb["red"])
+text(x = env_all_T0$factors$centroids[3:nrow(env_all_T0$factors$centroids), 1], 
+     y = env_all_T0$factors$centroids[3:nrow(env_all_T0$factors$centroids), 2], 
+     lab = gsub(rownames(env_all_T0$factors$centroids)[3:nrow(env_all_T0$factors$centroids)], pattern = "genotype", rep = ""),
+     col = cb["green"], cex = 0.75)
+``` 
+
+Despite the weak correlation, there is clear separation between the 95\% ellipses 
+suggesting that communities exposed to +AB are very different from the controls. 
+
+The genotypes are also strongly clustered around either +AB or -AB. For instance, pink, blue, green, an neon
+are positively associated with the -AB meaning that their microbiomes are similar to samples
+exposed to -AB. This means that their microbiome is more resistant to the effects of antibiotics
+(since they're associated with the "average" -AB community regardless of antibiotic exposure). 
+
+Conversely, genotypes orange, black, red, and purple are positively associated with +AB suggesting that their
+microbiomes are more susceptible to the effects of antibiotics (since they're associated with
+the "average" +AB community regardless of antibiotic exposure). That's an interesting result, I think.
+
+The PERMANOVA confirms this:
+
+```{r echo = FALSE}
+kable(permanova_T0$aov.tab)
+```
+
+There's a significant effect of antibiotic and genotype on community structure and a significant 
+two way interaction. This suggests that the effects of antibiotics
+on community structure vary across genotypes. The effects of antibiotics and genotype explain
+very approximately the same amount of variance.
+
+## Effects at T2
+
+To check the effect of both first and second dosage, we can analyze the data collected
+at T2 only:
+
+```{r echo = FALSE}
+env_all_T2_table <- as.data.frame(rbind(env_all_T2$factors$r, env_all_T2$factors$pvals))
+rownames(env_all_T2_table) <- c("Correlation", "P-value")
+kable(env_all_T2_table)
+```
+
+Genotype is strongly correlated to the nMDS axes but antibiotic is only weakly correlated
+to the same axes suggesting a weaker effect. Exposure is not strongly related to either
+axis suggesting a delayed effect on community structure. Here's a plot of T2:
+
+```{r echo = FALSE}
+coords <- nmds_norm_T2$points
+par(plotconf)
+plot(coords[, 1], coords[, 2], xlab = "nMDS 1", ylab = "", type = "n",
+     xlim = c(-0.5, 0.5), ylim = c(-0.25, 0.25))
+mbox()
+ylabel("nMDS 2")
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_T2, phenos[locs_T2, ]$antibiotic, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+xy_minus <- vegan:::veganCovEllipse(ellipse_coords$MinusA$cov, 
+                                    ellipse_coords$MinusA$center, sqrt(qchisq(conf, 2)))
+xy_plus <- vegan:::veganCovEllipse(ellipse_coords$PlusA$cov, 
+                                   ellipse_coords$PlusA$center, sqrt(qchisq(conf, 2)))
+vegan:::ordiArgAbsorber(xy_minus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['blue'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$MinusA$center[1], y = ellipse_coords$MinusA$center[2],
+     labels = "-AB", col = cb["blue"])
+vegan:::ordiArgAbsorber(xy_plus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['red'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$PlusA$center[1], y = ellipse_coords$PlusA$center[2], 
+     labels = "+AB", col = cb["red"])
+text(x = env_all_T2$factors$centroids[3:10, 1], 
+     y = env_all_T2$factors$centroids[3:10, 2], 
+     lab = gsub(rownames(env_all_T2$factors$centroids)[3:10], pattern = "genotype", rep = ""),
+     col = cb["green"], cex = 0.75)
+
+text(x = env_all_T2$factors$centroids[11:14, 1], 
+     y = env_all_T2$factors$centroids[11:14, 2], 
+     lab = gsub(rownames(env_all_T2$factors$centroids)[11:14], pattern = "exposure", replacement = ""),
+     col = cb["orange"])
+```
+
+The clear separation between the antibiotic treatment 95\% ellipses clearly shows that
+their communities differ. The fact that the exposure factors are clustered around zero
+indicates little separation in the community structure between those treatments.
+
+The genotypes continue to be segregated but purple seems to be shifting to the other
+cluster. Additionally, their association with AB is weakening. The PERMANOVA confirms this result:
+
+```{r echo = FALSE}
+kable(permanova_T2$aov.tab)
+```
+
+There's a significant effect of antibiotic, exposure and genotype on community structure.
+There is also a significant two-way interaction between antibiotic and exposure.
+
+The significant antibiotic x exposure interaction confirms what we saw in the host analysis:
+the effect of exposure depends on whether the microbiome was reset via antibiotics. This interaction
+may be significant but it is weak here (low $R^2$).
+
+The lack of two way or three way interactions with genotype indicate that the effects of
+exposure and antibiotics are consistent across genotypes. Hence, it seems as though the differences
+in the community response to antibiotics across genotypes disappears over time.
+
+## Effects at the end of the experiment
+
+To determine the effect of antibiotics and exposure on final community structure,
+we focus only on T3:
+
+```{r echo = FALSE}
+env_all_T3_table <- as.data.frame(rbind(env_all_T3$factors$r, env_all_T3$factors$pvals))
+rownames(env_all_T3_table) <- c("Correlation", "P-value")
+kable(env_all_T3_table)
+```
+
+Genotype is strongly correlated to the nMDS axes but antibiotic and exposure are 
+only weakly correlated to the same axes suggesting weaker effects for the latter.
+Here is a plot of the nMDS:
+
+```{r echo = FALSE}
+coords <- nmds_norm_T3$points
+par(plotconf)
+plot(coords[, 1], coords[, 2], xlab = "nMDS 1", ylab = "", type = "n",
+     xlim = c(-0.35, 0.35), ylim = c(-0.35, 0.35))
+mbox()
+ylabel("nMDS 2")
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+conf = 0.95
+alpha = 80
+# Draw ellipses
+ellipse_coords <- ordiellipse(nmds_norm_T3, phenos[locs_T3, ]$antibiotic, kind="se", conf=0.95, lwd=2, 
+                              draw = "none", col = c("black"), alpha = 40, label = FALSE)
+xy_minus <- vegan:::veganCovEllipse(ellipse_coords$MinusA$cov, 
+                                    ellipse_coords$MinusA$center, sqrt(qchisq(conf, 2)))
+xy_plus <- vegan:::veganCovEllipse(ellipse_coords$PlusA$cov, 
+                                   ellipse_coords$PlusA$center, sqrt(qchisq(conf, 2)))
+vegan:::ordiArgAbsorber(xy_minus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['blue'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$MinusA$center[1], y = ellipse_coords$MinusA$center[2],
+     labels = "-AB", col = cb["blue"])
+vegan:::ordiArgAbsorber(xy_plus, FUN = polygon, 
+                        col = rgb(t(col2rgb(cb['red'])), alpha = alpha, maxColorValue = 255))
+text(x = ellipse_coords$PlusA$center[1], y = ellipse_coords$PlusA$center[2], 
+     labels = "+AB", col = cb["red"])
+text(x = env_all_T3$factors$centroids[7:14, 1], 
+     y = env_all_T3$factors$centroids[7:14, 2], 
+     lab = gsub(rownames(env_all_T3$factors$centroids)[7:14], pattern = "genotype", rep = ""),
+     col = cb["green"], cex = 0.75)
+text(x = env_all_T3$factors$centroids[3:6, 1], 
+     y = env_all_T3$factors$centroids[3:6, 2], 
+     lab = gsub(rownames(env_all_T3$factors$centroids)[3:6], pattern = "exposure", replacement = ""),
+     col = cb["orange"])
+```
+
+There is still significant separation between AB treatments but it has decreased
+since T2 indicating that the effects are waning over time. There is greater separation
+between the exposure treatments, however, with DD being associated with +AB
+and HH being associated with -AB. The other two treatments (HD and DH) are in-between.
+This suggests that corals that received a double dose of healthy exposure are more similar
+to the average -AB community whereas those that received a double dose of diseased exposure
+are more similar to the average +AB community. I think this differential association between
+AB and exposure treatments suggests that the probiotic effect is real and that once it's neutralized
+via exposure to antibiotics, it can lead to a diseased microbiome.
+
+The lack of clear effect of the mixed exposure treatment (HD vs. DH) suggests that the order
+of the exposure does not matter much (no priority effects). The fact that they sit right in the
+middle of the extreme treatments (HH and DD) suggests that competition between the healthy and 
+diseased exposures is leading to an intermediate microbiome.
+
+The PERMANOVA confirms these results:
+
+```{r echo = FALSE}
+kable(permanova_T3$aov.tab)
+```
+
+There's a significant effect of antibiotic, exposure and genotype on community structure 
+and a significant two way interaction between antibiotic and exposure. Interestingly, 
+exposure explains a larger proportion of the variance at T3 than T2 suggesting a delayed effect.

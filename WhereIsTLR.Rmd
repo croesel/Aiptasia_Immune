@@ -1,0 +1,60 @@
+---
+title: "WhereIsTLR"
+author: "Chuck Roesel"
+date: "6/7/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(data.table)
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+allBlast <- read.csv("aipAnnot.csv")
+```
+```{r}
+head(allBlast)
+```
+
+
+```{r}
+partialTLR <- subset(allBlast, symbol %like% "TLR" & evalue < 1e-10, select=c("qseqid", "species", "evalue", "cov", "symbol"))
+partialTLR
+```
+
+```{r}
+selectedAnnot <- read.csv("aipAnnot2.csv")
+head(selectedAnnot)
+```
+
+```{r}
+mergedTLRandSelected <- merge(partialTLR, selectedAnnot, by="qseqid")
+mergedTLRandSelected
+```
+
+```{r}
+deGenes <- read.csv("dfBestAllAnnotPath.csv")
+tollAndDE <- merge(mergedTLRandSelected, deGenes, by.x="qseqid", by.y="KX")
+tollAndDE <- subset(tollAndDE, VibrioPadj < .05 & VibrioLFC > 0, select=c("qseqid", "evalue.x", "cov.x", "symbol.x", "evalue.y", "cov.y", "symbol.y","species", "VibrioLFC", "VibrioPadj"))
+kable(tollAndDE)
+write.csv(tollAndDE, file="whereIsToll.csv")
+```
+
+```{r}
+library(Biostrings)
+library(tidyr)
+transcripts <- readAAStringSet("kxAminoAcids.fasta")
+dfTranscripts <- as.data.frame(transcripts)
+dfTranscripts$acc <- rownames(dfTranscripts)
+dfTranscripts <- dfTranscripts %>% separate(acc, c("acc", "desc"), " ")
+deTranscripts <- merge(deGenes, dfTranscripts, by.x="KX", by.y="acc")
+deTranscripts <- subset(deTranscripts, VibrioPadj < .05 & VibrioLFC > 1, select=c("KX", "x"))
+deTranscripts$KX <- paste0('>',deTranscripts$KX)
+write.table(deTranscripts, file="upVibrio.fa", sep="\n", quote=F, row.names = F, col.names=F)
+```
+
+```{r}
+
+```

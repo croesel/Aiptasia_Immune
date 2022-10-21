@@ -1,0 +1,35 @@
+---
+title: "Univariate Aiptasia Expression Analyses"
+author: "Chuck Roesel"
+date: "09/29/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+source("http://faraway.neu.edu/data/Rprofile")
+```
+
+## Data preparation
+
+Load packages and the extract our data:
+
+```{r, include=FALSE}
+# Load packages
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+# Load results
+load("univariate_updown_data.RData")
+geneTable <- upVM[,c("Gene", "Description")]
+```
+Venn Diagram, |Log2| > 0
+```{r}
+vennDiagram(a, circle.col=c("red","green","blue","yellow"), show.include = TRUE)
+```
+
+Genes Up Menthol and Vibrio
+```{r}
+kable(unique(geneTable), row.names=FALSE)
+```
+

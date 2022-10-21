@@ -1,0 +1,87 @@
+---
+title: "Aiptasia Immune Response"
+output:
+  pdf_document:
+    fig_caption: true
+  html_document:
+    df_print: paged
+  md_document:
+    variant: gfm
+    df_print: paged
+  word_document: default
+classoption: landscape
+editor_options: 
+  chunk_output_type: inline
+---
+```{r global_options, include=T}
+rm(list = ls())
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE, results='asis')
+```
+
+```{r message=FALSE, warning=FALSE}
+figNum <- 0;
+library(knitr)
+library(kableExtra)
+library(grid)
+library(UpSetR)
+library(stringr)
+library(gdata)
+library(tidyr)
+library(dplyr)
+library(knitr)
+library(pander)
+library(pheatmap)
+library(DESeq2)
+library(rjson)
+library(tximport)
+library(readr)
+library(Biostrings)
+library(pathview)
+library(EBImage)
+library(EGSEA)
+library(EGSEAdata)
+library(edgeR)
+#library(GSEABase)
+#library(GSVAdata)
+suppressWarnings(suppressMessages(library(metagenomeSeq)))
+suppressWarnings(suppressMessages(library(vegan)))
+alpha <- .05
+logThreshold <- 0
+```
+
+```{r}
+aipAnnot <- read.csv("aipAnnot.csv", row.names=1, stringsAsFactors = F)
+aipAnnot <- subset(aipAnnot, select=c("qseqid", "KO", "cov", "evalue", "symbol", "GeneDesc"))
+aipAnnot$GeneDesc <- trimws(aipAnnot$GeneDesc, which = c("both"))
+```
+
+```{r}
+aipAnnot$lenDiff <- abs(aipAnnot$cov - 1)
+head(aipAnnot)
+```
+```{r}
+aipAnnot2 <- subset(aipAnnot,evalue < 1e-10 & lenDiff < .5)
+aipAnnot2 <- aipAnnot2[order(aipAnnot2$lenDiff, aipAnnot2$evalue),]
+head(aipAnnot2)
+```
+
+```{r}
+aipAnnot2 <- aggregate(. ~KO, data = aipAnnot2, FUN = head,1)
+head(aipAnnot2)
+```
+
+```{r}
+write.csv(aipAnnot2, file="aipAnnot2.csv")
+aipAnnot2 <- read.csv("aipAnnot2.csv", row.names=1, stringsAsFactors = F)
+head(aipAnnot2)
+```
+```{r}
+aipAnnot2 <- aipAnnot2[order(aipAnnot2$lenDiff, aipAnnot2$evalue),]
+aipAnnot2 <- aggregate(. ~ qseqid, data = aipAnnot2, FUN = head,1)
+head(aipAnnot2)
+```
+```{r}
+write.csv(aipAnnot2, file="aipAnnot2.csv")
+aipAnnot2 <- read.csv("aipAnnot2.csv", row.names=1, stringsAsFactors = F)
+head(aipAnnot2)
+```
