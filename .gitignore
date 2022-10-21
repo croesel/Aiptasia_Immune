@@ -3,3 +3,7 @@
 .Rproj.user
 !*.png
 !*.md
+!koDesc.tsv
+!koToPathway.tsv
+!*.sf
+!.gitignore
