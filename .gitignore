@@ -7,3 +7,4 @@
 !koToPathway.tsv
 !*.sf
 !.gitignore
+!*.sh

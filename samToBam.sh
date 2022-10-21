@@ -1,0 +1,25 @@
+#!/bin/sh
+samtools view -b -S bam/Aip02.sam -o bam/Aip02.bam && rm bam/Aip02.sam
+samtools view -b -S bam/Aip05.sam -o bam/Aip05.bam && rm bam/Aip05.sam
+samtools view -b -S bam/Aip12.sam -o bam/Aip12.bam && rm bam/Aip12.sam
+samtools view -b -S bam/Aip13.sam -o bam/Aip13.bam && rm bam/Aip13.sam
+samtools view -b -S bam/Aip14.sam -o bam/Aip14.bam && rm bam/Aip14.sam
+samtools view -b -S bam/Aip15.sam -o bam/Aip15.bam && rm bam/Aip15.sam
+samtools view -b -S bam/Aip17.sam -o bam/Aip17.bam && rm bam/Aip17.sam
+samtools view -b -S bam/Aip18.sam -o bam/Aip18.bam && rm bam/Aip18.sam
+samtools view -b -S bam/Aip19.sam -o bam/Aip19.bam && rm bam/Aip19.sam
+samtools view -b -S bam/Aip20.sam -o bam/Aip20.bam && rm bam/Aip20.sam
+samtools view -b -S bam/Aip21.sam -o bam/Aip21.bam && rm bam/Aip21.sam
+samtools view -b -S bam/Aip23.sam -o bam/Aip23.bam && rm bam/Aip23.sam
+samtools view -b -S bam/Aip24.sam -o bam/Aip24.bam && rm bam/Aip24.sam
+samtools view -b -S bam/Aip25.sam -o bam/Aip25.bam && rm bam/Aip25.sam
+samtools view -b -S bam/Aip26.sam -o bam/Aip26.bam && rm bam/Aip26.sam
+samtools view -b -S bam/Aip28.sam -o bam/Aip28.bam && rm bam/Aip28.sam
+samtools view -b -S bam/Aip29.sam -o bam/Aip29.bam && rm bam/Aip29.sam
+samtools view -b -S bam/Aip30.sam -o bam/Aip30.bam && rm bam/Aip30.sam
+samtools view -b -S bam/Aip32.sam -o bam/Aip32.bam && rm bam/Aip32.sam
+samtools view -b -S bam/Aip33.sam -o bam/Aip33.bam && rm bam/Aip33.sam
+samtools view -b -S bam/Aip34.sam -o bam/Aip34.bam && rm bam/Aip34.sam
+samtools view -b -S bam/Aip35.sam -o bam/Aip35.bam && rm bam/Aip35.sam
+samtools view -b -S bam/Aip36.sam -o bam/Aip36.bam && rm bam/Aip36.sam
+samtools view -b -S bam/Aip12.sam -o bam/Aip12.bam && rm bam/Aip12.sam

@@ -1,0 +1,25 @@
+#!/bin/sh
+samtools sort bam/Aip02.bam bam/Aip02.sorted && rm bam/Aip02.bam
+samtools sort bam/Aip05.bam bam/Aip05.sorted && rm bam/Aip05.bam
+samtools sort bam/Aip06.bam bam/Aip06.sorted && rm bam/Aip06.bam
+samtools sort bam/Aip12.bam bam/Aip12.sorted && rm bam/Aip12.bam
+samtools sort bam/Aip13.bam bam/Aip13.sorted && rm bam/Aip13.bam
+samtools sort bam/Aip14.bam bam/Aip14.sorted && rm bam/Aip14.bam
+samtools sort bam/Aip15.bam bam/Aip15.sorted && rm bam/Aip15.bam
+samtools sort bam/Aip17.bam bam/Aip17.sorted && rm bam/Aip17.bam
+samtools sort bam/Aip18.bam bam/Aip18.sorted && rm bam/Aip18.bam
+samtools sort bam/Aip19.bam bam/Aip19.sorted && rm bam/Aip19.bam
+samtools sort bam/Aip20.bam bam/Aip20.sorted && rm bam/Aip20.bam
+samtools sort bam/Aip21.bam bam/Aip21.sorted && rm bam/Aip21.bam
+samtools sort bam/Aip23.bam bam/Aip23.sorted && rm bam/Aip23.bam
+samtools sort bam/Aip24.bam bam/Aip24.sorted && rm bam/Aip24.bam
+samtools sort bam/Aip25.bam bam/Aip25.sorted && rm bam/Aip25.bam
+samtools sort bam/Aip26.bam bam/Aip26.sorted && rm bam/Aip26.bam
+samtools sort bam/Aip28.bam bam/Aip28.sorted && rm bam/Aip28.bam
+samtools sort bam/Aip29.bam bam/Aip29.sorted && rm bam/Aip29.bam
+samtools sort bam/Aip30.bam bam/Aip30.sorted && rm bam/Aip30.bam
+samtools sort bam/Aip32.bam bam/Aip32.sorted && rm bam/Aip32.bam
+samtools sort bam/Aip33.bam bam/Aip33.sorted && rm bam/Aip33.bam
+samtools sort bam/Aip34.bam bam/Aip34.sorted && rm bam/Aip34.bam
+samtools sort bam/Aip35.bam bam/Aip35.sorted && rm bam/Aip35.bam
+samtools sort bam/Aip36.bam bam/Aip36.sorted && rm bam/Aip36.bam
