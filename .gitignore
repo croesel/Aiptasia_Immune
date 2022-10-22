@@ -8,3 +8,5 @@
 !*.sf
 !.gitignore
 !*.sh
+!aipgene_to_kxj.tsv
+!test3KO.csv
